@@ -1,7 +1,6 @@
 <template>
-  <div
-    class="flex h-dvh w-screen overflow-hidden bg-slate-100 font-sans relative"
-  >
+  <div class="flex h-dvh w-screen overflow-hidden bg-slate-100 font-sans relative">
+    
     <SideBar
       class="hidden md:flex flex-none w-72 z-30 shadow-xl border-r border-slate-200"
       :activeDeviceId="currentDeviceId"
@@ -16,6 +15,7 @@
       @open-geofence="openGeofencePanel"
       @view-history="goToHistory"
       @find-bike="findMyBike"
+      @toast="triggerToast" 
     />
 
     <div
@@ -38,12 +38,7 @@
         :activeDeviceId="currentDeviceId"
         :devices="devicesArray"
         :isOwner="isOwner"
-        @select-device="
-          (id) => {
-            handleSelectDevice(id);
-            isMobileMenuOpen = false;
-          }
-        "
+        @select-device="(id) => { handleSelectDevice(id); isMobileMenuOpen = false; }"
         @logout="handleLogout"
         @add-device="showAddDeviceModal = true"
         @delete-device="handleDirectDelete"
@@ -52,6 +47,7 @@
         @open-geofence="openGeofencePanel"
         @view-history="goToHistory"
         @find-bike="findMyBike"
+        @toast="triggerToast"
       />
     </transition>
 
@@ -59,23 +55,13 @@
       @click="isMobileMenuOpen = true"
       class="md:hidden absolute top-4 left-4 z-40 btn btn-circle btn-sm bg-white shadow-md border-slate-100 text-slate-700"
     >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke-width="1.5"
-        stroke="currentColor"
-        class="w-6 h-6"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
-        />
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
       </svg>
     </button>
 
     <div class="flex-1 relative w-full h-full overflow-hidden bg-slate-200">
+      
       <MapViewer
         ref="mapViewerRef"
         :data="devicesArray"
@@ -107,12 +93,14 @@
         @mute-vehicle="handleRemoteStopAlarm"
         @trigger-toast="triggerToast"
       />
+
       <AddDeviceModal
         v-if="showAddDeviceModal && isOwner"
         :isOpen="showAddDeviceModal"
         @close="showAddDeviceModal = false"
         @added="handleDeviceAdded"
       />
+
       <EditDeviceModal
         v-if="showSettingsModal && isOwner"
         :isOpen="showSettingsModal"
@@ -131,18 +119,19 @@
         @toast="triggerToast"
       />
 
-      <div
-        v-if="showToast"
-        class="toast toast-top toast-center z-[9999] w-full max-w-xs px-4"
-      >
-        <div :class="['alert shadow-lg flex-row gap-2', toastData.colorClass]">
-          <span class="text-2xl">{{ toastData.icon }}</span>
-          <div class="flex-1 min-w-0">
-            <h3 class="font-bold truncate">{{ toastData.title }}</h3>
-            <div class="text-xs truncate">{{ toastData.message }}</div>
-          </div>
+      <Transition name="toast">
+        <div v-if="showToast" class="fixed top-5 right-5 z-[9999] flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl backdrop-blur-md min-w-[300px] border transition-all duration-300" :class="toastData.colorClass">
+            <div class="text-2xl">{{ toastData.icon }}</div>
+            <div class="flex-1">
+                <h3 class="font-bold text-sm tracking-wide">{{ toastData.title }}</h3>
+                <p class="text-xs opacity-90">{{ toastData.message }}</p>
+            </div>
+            <button @click="showToast = false" class="opacity-60 hover:opacity-100">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
         </div>
-      </div>
+      </Transition>
+
     </div>
   </div>
 </template>
@@ -600,3 +589,8 @@ onUnmounted(() => {
   muteAlert();
 });
 </script>
+<style scoped>
+/* Animation สำหรับ Toast */
+.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-20px); }
+</style>
