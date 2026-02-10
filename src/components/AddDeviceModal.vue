@@ -35,14 +35,16 @@
           </label>
           <div class="relative">
             <input 
-              v-model="form.emergencyPhone" 
+              v-model="form.emergencyPhone"
+              @input="handlePhoneInput"
               type="tel" 
+              maxlength="10"
               class="w-full border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-sm pl-9"
               placeholder="08xxxxxxxx"
             />
             <span class="absolute left-3 top-2 text-gray-400">📞</span>
           </div>
-          <p class="text-[10px] text-gray-400 mt-1">*ค่าเริ่มต้นดึงจากเบอร์สมาชิก</p>
+          <p class="text-[10px] text-gray-400 mt-1">*ค่าเริ่มต้นดึงจากเบอร์สมาชิก (ตัวเลข 10 หลัก)</p>
         </div>
 
         <div v-if="errorMessage" class="text-red-500 text-xs bg-red-50 p-2 rounded border border-red-200">
@@ -79,37 +81,57 @@ const errorMessage = ref('');
 const form = reactive({
   deviceId: '',
   name: '',
-  emergencyPhone: '' // ✅ ใช้ชื่อนี้ให้ตรงกับ Backend
+  emergencyPhone: ''
 });
+
+// ✅ ฟังก์ชันกรองให้พิมพ์ได้แค่ตัวเลข
+const handlePhoneInput = (event) => {
+  // แทนที่ทุกอย่างที่ไม่ใช่ตัวเลข (0-9) ด้วยค่าว่าง
+  let value = event.target.value.replace(/\D/g, '');
+  
+  // ตัดให้เหลือแค่ 10 ตัว (กันเหนียวเผื่อ maxlength ไม่ทำงานในบาง browser)
+  if (value.length > 10) value = value.slice(0, 10);
+  
+  // อัปเดตค่ากลับเข้าไป
+  form.emergencyPhone = value;
+  event.target.value = value;
+};
 
 watch(() => props.isOpen, (newVal) => {
   if (newVal) {
     form.deviceId = '';
     form.name = '';
-    // ดึงเบอร์จาก localStorage มาใส่รอไว้เลย
-    form.emergencyPhone = localStorage.getItem('user_phone') || ''; 
+    // ดึงเบอร์เดิมมา แล้วกรองให้เหลือแต่เลขทันที (เผื่อเบอร์เดิมมีขีด - )
+    const savedPhone = localStorage.getItem('user_phone') || '';
+    form.emergencyPhone = savedPhone.replace(/\D/g, '').slice(0, 10);
     errorMessage.value = '';
   }
 });
 
 const submit = async () => {
   errorMessage.value = '';
+
+  // เช็คค่าว่าง
   if (!form.deviceId || !form.name) {
     errorMessage.value = "กรุณากรอก Device ID และชื่อรถ";
+    return;
+  }
+
+  // ✅ เช็คเบอร์โทร: ต้องมีค่า และต้องครบ 10 หลัก
+  if (!form.emergencyPhone || form.emergencyPhone.length !== 10) {
+    errorMessage.value = "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก";
     return;
   }
   
   loading.value = true;
   try {
-    // ✅ ส่งข้อมูลทีเดียวจบ! (รวม emergencyPhone ไปเลย)
-    // ❌ ตัดบรรทัด update-phone ที่ทำให้เกิด 404 ออกไปแล้ว
     await api.post('/devices', {
       deviceId: form.deviceId,
       name: form.name,
       emergencyPhone: form.emergencyPhone 
     });
 
-    alert("✅ เพิ่มอุปกรณ์สำเร็จ!");
+    // alert("✅ เพิ่มอุปกรณ์สำเร็จ!"); // เอา alert ออกก็ได้ถ้าต้องการความสมูท
     emit('added');
     emit('close');
     

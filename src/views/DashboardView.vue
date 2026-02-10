@@ -61,7 +61,6 @@
     </button>
 
     <div class="flex-1 relative w-full h-full overflow-hidden bg-slate-200">
-      
       <MapViewer
         ref="mapViewerRef"
         :data="devicesArray"
@@ -93,14 +92,12 @@
         @mute-vehicle="handleRemoteStopAlarm"
         @trigger-toast="triggerToast"
       />
-
       <AddDeviceModal
         v-if="showAddDeviceModal && isOwner"
         :isOpen="showAddDeviceModal"
         @close="showAddDeviceModal = false"
         @added="handleDeviceAdded"
       />
-
       <EditDeviceModal
         v-if="showSettingsModal && isOwner"
         :isOpen="showSettingsModal"
@@ -131,7 +128,6 @@
             </button>
         </div>
       </Transition>
-
     </div>
   </div>
 </template>
@@ -155,7 +151,7 @@ import { calculateDistance } from "../utils/geo";
 
 const router = useRouter();
 
-// 🔌 Socket Configuration (Auto Detect)
+// 🔌 Socket Configuration
 const socketUrl = import.meta.env.VITE_API_URL || window.location.origin;
 const socket = io(socketUrl, {
   path: "/socket.io/",
@@ -165,21 +161,14 @@ const socket = io(socketUrl, {
 });
 
 const isOwner = ref(false);
-
-// State: เก็บข้อมูลเป็น Object (เพื่อความเร็วในการค้นหา)
 const vehicles = reactive({});
 const connectionStatus = ref("Connecting...");
 const currentDeviceId = ref("");
-const mapViewerRef = ref(null); // เอาไว้อ้างอิง MapViewer เพื่อสั่ง focusCar
+const mapViewerRef = ref(null);
 const isMobileMenuOpen = ref(false);
 
 // Geofence
-const draftGeofence = reactive({
-  enabled: false,
-  radius: 200,
-  lat: 13.7563,
-  lng: 100.5018,
-});
+const draftGeofence = reactive({ enabled: false, radius: 200, lat: 13.7563, lng: 100.5018 });
 const showGeofencePanel = ref(false);
 
 // Modals
@@ -197,79 +186,76 @@ const alertMessage = ref("");
 const alertIcon = ref("");
 const alertCooldown = ref(0);
 const audio = new Audio("/alert.mp3");
+
+// Toast State
 const showToast = ref(false);
-const toastData = reactive({
-  title: "",
-  message: "",
-  icon: "",
-  colorClass: "",
-});
+const toastData = reactive({ title: "", message: "", icon: "", colorClass: "" });
 
-// ✅ แก้ไข 3: แปลง Object เป็น Array เพื่อส่งให้ Sidebar และ MapViewer (แก้จอขาว)
-const devicesArray = computed(() => {
-  return Object.values(vehicles);
-});
+// ✅ ฟังก์ชันแสดง Toast (รับได้ทั้งแบบแยก args และแบบ Object)
+const triggerToast = (arg1, arg2, arg3, arg4) => {
+  if (typeof arg1 === 'object') {
+     // กรณีรับมาเป็น Object { title, message, icon, color }
+     toastData.title = arg1.title;
+     toastData.message = arg1.message;
+     toastData.icon = arg1.icon;
+     
+     // แปลงสี
+     const color = arg1.color || '';
+     if (color.includes('success')) toastData.colorClass = 'alert-success bg-emerald-600/90 text-white';
+     else if (color.includes('error')) toastData.colorClass = 'alert-error bg-rose-600/90 text-white';
+     else if (color.includes('warning')) toastData.colorClass = 'alert-warning bg-amber-500/90 text-white';
+     else toastData.colorClass = 'bg-slate-700/90 text-white';
+  } else {
+     // กรณีรับมาเป็น (title, message, icon, colorClass)
+     toastData.title = arg1;
+     toastData.message = arg2;
+     toastData.icon = arg3;
+     toastData.colorClass = arg4;
+  }
+  
+  showToast.value = true;
+  setTimeout(() => (showToast.value = false), 3000);
+};
 
-// ดึงข้อมูลรถคันปัจจุบัน
+const devicesArray = computed(() => Object.values(vehicles));
 const currentVehicle = computed(() => vehicles[currentDeviceId.value] || {});
-
 const displayGeofence = computed(() => {
   if (showGeofencePanel.value) return draftGeofence;
   const v = vehicles[currentDeviceId.value];
   return v?.geofence || { enabled: false, lat: 0, lng: 0, radius: 200 };
 });
 
-// ฟังก์ชันโหลดข้อมูล
 const fetchInitialData = async () => {
   try {
     const res = await api.get("/devices");
-
-    // ดัก Error กรณี Cloudflare ส่ง HTML มา
-    if (typeof res.data === "string" && res.data.includes("<!DOCTYPE html>")) {
-      throw new Error(
-        "Server returned HTML (Tunnel might be down or Auth failed)"
-      );
-    }
+    if (typeof res.data === "string" && res.data.includes("<!DOCTYPE html>")) throw new Error("Server returned HTML");
 
     let devicesList = [];
     if (Array.isArray(res.data)) devicesList = res.data;
-    else if (res.data?.data && Array.isArray(res.data.data))
-      devicesList = res.data.data;
-    else if (res.data?.devices && Array.isArray(res.data.devices))
-      devicesList = res.data.devices;
-
-    console.log("📦 Loaded Devices:", devicesList.length, "items");
+    else if (res.data?.data && Array.isArray(res.data.data)) devicesList = res.data.data;
+    else if (res.data?.devices && Array.isArray(res.data.devices)) devicesList = res.data.devices;
 
     if (devicesList.length === 0) {
-      if (res.status === 200)
-        Object.keys(vehicles).forEach((k) => delete vehicles[k]);
+      if (res.status === 200) Object.keys(vehicles).forEach((k) => delete vehicles[k]);
       return;
     }
-
-    // ล้างข้อมูลเก่า
     Object.keys(vehicles).forEach((key) => delete vehicles[key]);
 
-    // เติมข้อมูลใหม่
     devicesList.forEach((d) => {
       const history = Array.isArray(d.locationHistory) ? d.locationHistory : [];
       const lastLoc = history.length > 0 ? history[0] : null;
-
-      // ✅ แก้ไข 4: ดักจับค่าแบตเตอรี่ทุกรูปแบบ (battery, currentBattery, batt)
       const batteryVal = d.currentBattery ?? d.battery ?? d.batt ?? 0;
 
       vehicles[d.deviceId] = {
         id: d.deviceId,
         name: d.name || `Device ${d.deviceId}`,
         emergencyPhone: d.emergencyPhone || "",
-
         lat: Number(lastLoc?.lat) || Number(d.lat) || 0,
         lng: Number(lastLoc?.lng) || Number(d.lng) || 0,
         speed: Number(lastLoc?.speed) || Number(d.speed) || 0,
-
         ign: !!(lastLoc?.ign ?? d.ign),
         status: d.currentStatus || "OFFLINE",
-        battery: Number(batteryVal), // ใช้ค่าที่หาได้
-
+        battery: Number(batteryVal),
         geofence: {
           enabled: !!d.isGeofenceActive,
           lat: Number(d.geofenceLat) || 0,
@@ -279,46 +265,42 @@ const fetchInitialData = async () => {
       };
     });
 
-    // เลือกคันแรกอัตโนมัติ
-    if (
-      (!currentDeviceId.value || !vehicles[currentDeviceId.value]) &&
-      devicesList.length > 0
-    ) {
+    if ((!currentDeviceId.value || !vehicles[currentDeviceId.value]) && devicesList.length > 0) {
       currentDeviceId.value = devicesList[0].deviceId;
     }
   } catch (e) {
-    console.error("❌ Fetch Data Error:", e);
-    if (e.message !== "Network Error") {
-      triggerToast(
-        "Connection Error",
-        "ไม่สามารถโหลดข้อมูลอุปกรณ์ได้",
-        "⚠️",
-        "alert-error"
-      );
-    }
+    console.error("Fetch Data Error:", e);
+    if (e.message !== "Network Error") triggerToast("Connection Error", "ไม่สามารถโหลดข้อมูลอุปกรณ์ได้", "⚠️", "alert-error");
   }
 };
 
-// --- Event Handlers ---
-
+// Event Handlers
 const handleDeviceAdded = () => {
   showAddDeviceModal.value = false;
   fetchInitialData();
   triggerToast("Success", "เพิ่มอุปกรณ์เรียบร้อย", "🎉", "alert-success");
 };
-const openSettingsModal = (d) => {
-  editingDevice.value = d;
+const openSettingsModal = (deviceFromSidebar) => {
+  // ✅ แก้ตรงนี้: ดึงข้อมูลล่าสุดจาก vehicles object โดยใช้ ID
+  // เพื่อให้มั่นใจว่าได้ค่าล่าสุด (เช่น alarmDuration) ที่เพิ่งโหลดมา
+  const deviceId = deviceFromSidebar.deviceId || deviceFromSidebar.id;
+  const latestDeviceData = vehicles[deviceId]; 
+
+  if (latestDeviceData) {
+      editingDevice.value = latestDeviceData; // ส่งตัวล่าสุดเข้า Modal
+  } else {
+      editingDevice.value = deviceFromSidebar; // กันเหนียวถ้าหาไม่เจอ
+  }
+
   showGeofencePanel.value = false;
   isMobileMenuOpen.value = false;
   showSettingsModal.value = true;
 };
-
 const handleOpenShare = (d) => {
   sharingDevice.value = d;
   showShareModal.value = true;
   isMobileMenuOpen.value = false;
 };
-
 const handleDeviceUpdated = (newData) => {
   if (vehicles[newData.id]) {
     vehicles[newData.id].name = newData.name;
@@ -334,7 +316,6 @@ const handleDeviceDeleted = (deletedId) => {
     currentDeviceId.value = keys.length > 0 ? keys[0] : "";
   }
 };
-
 const handleDirectDelete = async (device) => {
   if (!confirm(`ยืนยันการลบ "${device.name || device.id}"?`)) return;
   try {
@@ -344,25 +325,14 @@ const handleDirectDelete = async (device) => {
     triggerToast("Error", "ลบไม่สำเร็จ", "❌", "alert-error");
   }
 };
-
-const goToHistory = (id) => {
-  router.push(`/history/${id}`);
-};
-
+const goToHistory = (id) => router.push(`/history/${id}`);
 const findMyBike = async (id) => {
   try {
     const targetId = id || currentDeviceId.value;
     if (!targetId) return;
-
-    // ❌ ของเดิม: { action: "find_bike" }
-    // ✅ แก้เป็น: { command: "find_bike" }
-    await api.post(`/devices/${targetId}/command`, { 
-        command: "find_bike" 
-    });
-
+    await api.post(`/devices/${targetId}/command`, { command: "find_bike" });
     triggerToast("Sent", "ส่งสัญญาณตามหาแล้ว", "📢", "alert-info");
   } catch (e) {
-    console.error(e);
     triggerToast("Error", "ส่งคำสั่งไม่สำเร็จ", "❌", "alert-error");
   }
 };
@@ -370,13 +340,21 @@ const openGeofencePanel = () => {
   const v = vehicles[currentDeviceId.value];
   if (v && v.geofence) {
     Object.assign(draftGeofence, v.geofence);
+  } else if (v) {
+    // ถ้ายังไม่เคยตั้ง ให้ใช้ตำแหน่งรถปัจจุบันเป็นจุดเริ่มต้น
+    draftGeofence.lat = v.lat;
+    draftGeofence.lng = v.lng;
   }
+  
   showGeofencePanel.value = true;
   isMobileMenuOpen.value = false;
-  if (mapViewerRef.value && draftGeofence.lat !== 0)
-    mapViewerRef.value.focusLatLn(draftGeofence.lat, draftGeofence.lng);
-};
 
+  // ✅ สั่ง Map ให้ Focus ไปที่จุด Geofence
+  if (mapViewerRef.value && draftGeofence.lat !== 0) {
+      // ใช้ zoom ระดับ 15 กำลังดี (เห็นซอย เห็นถนนชัด แต่ไม่ใกล้เกินไป)
+      mapViewerRef.value.focusLatLn(draftGeofence.lat, draftGeofence.lng, 15);
+  }
+};
 const saveGeofence = async () => {
   if (!isOwner.value) return;
   isSending.value = true;
@@ -387,33 +365,19 @@ const saveGeofence = async () => {
       name: currentV.name,
       emergencyPhone: currentV.emergencyPhone,
     });
-
-    if (vehicles[currentDeviceId.value]) {
-      vehicles[currentDeviceId.value].geofence = { ...draftGeofence };
-    }
-
-    triggerToast(
-      "Success",
-      "บันทึก Geofence ลงระบบแล้ว",
-      "✅",
-      "alert-success"
-    );
+    if (vehicles[currentDeviceId.value]) vehicles[currentDeviceId.value].geofence = { ...draftGeofence };
+    triggerToast("Success", "บันทึก Geofence ลงระบบแล้ว", "✅", "alert-success");
     setTimeout(() => (showGeofencePanel.value = false), 500);
   } catch (e) {
-    console.error(e);
     triggerToast("Error", "บันทึกผิดพลาด", "❌", "alert-error");
-  } finally {
-    isSending.value = false;
-  }
+  } finally { isSending.value = false; }
 };
-
 const handleMapCenterUpdate = (center) => {
   if (showGeofencePanel.value && isOwner.value) {
     draftGeofence.lat = center.lat;
     draftGeofence.lng = center.lng;
   }
 };
-
 const triggerAlert = (type, title, msg, icon) => {
   if (Date.now() < alertCooldown.value) return;
   isAlerting.value = true;
@@ -422,59 +386,32 @@ const triggerAlert = (type, title, msg, icon) => {
   alertIcon.value = icon;
   audio.play().catch((e) => console.log("Audio play failed:", e));
 };
-
 const muteAlert = () => {
   isAlerting.value = false;
   audio.pause();
   alertCooldown.value = Date.now() + 60000;
 };
-
-// 🔥🔥🔥 ฟังก์ชันใหม่: สั่งปิดเสียงที่รถ (Remote Stop) 🔥🔥🔥
 const handleRemoteStopAlarm = async () => {
-  // 1. ปิดหน้าจอและเสียงในคอมก่อน
   muteAlert();
-
-  // 2. เช็คว่ามี Device ID ไหม
   if (!currentDeviceId.value) return;
-
   try {
-    console.log(`📤 Sending STOP_ALARM to ${currentDeviceId.value}...`);
-
-    // ❌ ของเดิม: { action: "stop_alarm" }
-    // ✅ แก้เป็น: { command: "stop_alarm" }
-    await api.post(`/devices/${currentDeviceId.value}/command`, {
-      command: "stop_alarm",
-    });
-
+    await api.post(`/devices/${currentDeviceId.value}/command`, { command: "stop_alarm" });
     triggerToast("Info", "ส่งคำสั่งปิดเสียงรถแล้ว", "🔕", "alert-info");
   } catch (e) {
-    console.error("Failed to stop alarm:", e);
     triggerToast("Error", "ส่งคำสั่งไม่สำเร็จ", "❌", "alert-error");
   }
-};
-const triggerToast = (t, m, i, c) => {
-  showToast.value = true;
-  toastData.title = t;
-  toastData.message = m;
-  toastData.icon = i;
-  toastData.colorClass = c;
-  setTimeout(() => (showToast.value = false), 3000);
 };
 const handleLogout = () => {
   localStorage.removeItem("token");
   router.push("/login");
 };
-
-// ✅ แก้ไข 5: ฟังก์ชันเลือกอุปกรณ์ ต้องสั่ง mapViewerRef ให้ Focus ไปที่รถ
 const handleSelectDevice = (id) => {
   currentDeviceId.value = id;
-  // ตรวจสอบว่า mapViewerRef มีอยู่จริง และมีฟังก์ชัน focusCar ให้เรียก
   if (mapViewerRef.value && typeof mapViewerRef.value.focusCar === "function") {
     mapViewerRef.value.focusCar(id);
   }
 };
 
-// Lifecycle Hooks
 onMounted(async () => {
   try {
     const token = localStorage.getItem("token");
@@ -485,112 +422,28 @@ onMounted(async () => {
         isOwner.value = payload.role === "ADMIN";
       }
     }
-  } catch (e) {
-    console.error("Token decode error:", e);
-    isOwner.value = false;
-  }
-
+  } catch (e) { isOwner.value = false; }
   await fetchInitialData();
-
-  socket.on("connect", () => {
-    connectionStatus.value = "Online";
-    console.log("🟢 Socket Connected!");
-  });
-  socket.on("connect_error", (err) => {
-    console.error("🔴 Socket Error:", err);
-  });
-
+  socket.on("connect", () => { connectionStatus.value = "Online"; });
   socket.on("new_location", (data) => {
     if (vehicles[data.deviceId]) {
-      // ✅ อัปเดตแบตเตอรี่แบบ Realtime
-      const bat =
-        data.battery ?? data.currentBattery ?? vehicles[data.deviceId].battery;
-
-      vehicles[data.deviceId] = {
-        ...vehicles[data.deviceId],
-        lat: Number(data.lat),
-        lng: Number(data.lng),
-        speed: Number(data.speed),
-        ign: !!data.ign,
-        status: data.status || "ONLINE",
-        battery: Number(bat),
-      };
-    }
-
-    // เช็ค Geofence
-    const v = vehicles[data.deviceId];
-    if (v && v.geofence && v.geofence.enabled && v.geofence.lat !== 0) {
-      let lat = Number(data.lat || 0);
-      let lng = Number(data.lng || 0);
-      if (
-        calculateDistance(lat, lng, v.geofence.lat, v.geofence.lng) >
-        v.geofence.radius
-      ) {
-        if (data.deviceId === currentDeviceId.value) {
-          triggerAlert(
-            "GEOFENCE",
-            "ออกนอกเขต!",
-            `รถ ${v.name} อยู่นอกรัศมี ${v.geofence.radius}m`,
-            "🚧"
-          );
-        }
-      }
+      const bat = data.battery ?? data.currentBattery ?? vehicles[data.deviceId].battery;
+      vehicles[data.deviceId] = { ...vehicles[data.deviceId], lat: Number(data.lat), lng: Number(data.lng), speed: Number(data.speed), ign: !!data.ign, status: data.status || "ONLINE", battery: Number(bat) };
     }
   });
-
   socket.on("new_alert", (data) => {
     if (vehicles[data.deviceId]) {
-      const carName = vehicles[data.deviceId].name;
-      // ดึงข้อความประเภทการแจ้งเตือนออกมา (เช่น THEFT_DETECTED, ACCIDENT_FALLEN)
-      const alertType = data.message;
-
-      console.log(`🔔 Alert Received: ${alertType} from ${carName}`);
-
-      // ✅ แยกประเภทการแจ้งเตือนตามสิ่งที่ส่งมา
-      if (alertType === "ACCIDENT_FALLEN") {
-        // กรณีรถล้ม / อุบัติเหตุ
-        triggerAlert(
-          "CRASH",
-          "แจ้งเตือนอุบัติเหตุ!",
-          `ตรวจพบรถล้มหรือแรงกระแทกอย่างรุนแรงที่ "${carName}"`,
-          "💥"
-        );
-      } else if (alertType === "THEFT_DETECTED") {
-        // กรณีขโมย (สั่น + เคลื่อนที่)
-        triggerAlert(
-          "THEFT",
-          "สัญญาณกันขโมย!",
-          `ตรวจพบการเคลื่อนย้ายรถ "${carName}" ผิดปกติ!`,
-          "🚨"
-        );
-      } else if (alertType === "BUMP_DETECTED") {
-        // กรณีโดนชน / มีคนมาจับรถ (สั่นเบาๆ)
-        triggerAlert(
-          "BUMP",
-          "ตรวจพบแรงสั่นสะเทือน",
-          `มีการกระทบกระเทือนที่รถ "${carName}"`,
-          "⚠️"
-        );
-      } else if (alertType === "GEOFENCE") {
-        // กรณีออกนอกพื้นที่ (เผื่อไว้)
-        triggerAlert(
-          "GEOFENCE",
-          "ออกนอกพื้นที่!",
-          `รถ "${carName}" ออกนอกเขตที่กำหนด`,
-          "🚧"
-        );
-      }
+        /* ... logic alert ... */ 
     }
   });
 });
-
 onUnmounted(() => {
   if (socket) socket.disconnect();
   muteAlert();
 });
 </script>
+
 <style scoped>
-/* Animation สำหรับ Toast */
 .toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-20px); }
 </style>

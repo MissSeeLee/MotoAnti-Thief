@@ -33,7 +33,7 @@
             </label>
             <div class="relative">
                 <input 
-                    v-model="form.timer" 
+                    v-model.number="form.timer" 
                     type="number" 
                     min="0" 
                     max="60"
@@ -49,7 +49,7 @@
         </div>
 
         <div class="pt-4">
-            <button @click="saveAll" :disabled="loading" class="btn btn-primary w-full rounded-xl shadow-lg shadow-blue-200 text-lg font-bold">
+            <button @click="saveAll" :disabled="loading" class="btn btn-primary w-full rounded-xl shadow-lg shadow-blue-200 text-lg font-bold hover:scale-[1.02] transition-transform">
                <span v-if="loading" class="loading loading-spinner"></span>
                {{ loading ? 'กำลังบันทึก...' : 'บันทึกการเปลี่ยนแปลง' }}
             </button>
@@ -70,55 +70,61 @@ const emit = defineEmits(['close', 'updated', 'toast']);
 const loading = ref(false);
 const form = reactive({ 
     name: '', 
-    // phone: '', // ❌ ตัดออก
     timer: 0 
 });
 
-const deviceIdDisplay = computed(() => props.device?.deviceId || props.device?.id);
+const deviceIdDisplay = computed(() => props.device?.deviceId || props.device?.id || '');
 
-// 🔥 ดึงค่าเดิมมาแสดง
-watch(() => props.device, (newVal) => {
-    if (newVal) {
-        form.name = newVal.name || '';
-        // form.phone = newVal.emergencyPhone || newVal.phone || ''; // ❌ ตัดออก
-        
-        if (newVal.alarmDuration !== undefined && newVal.alarmDuration !== null) {
-            form.timer = Number(newVal.alarmDuration); 
-        } else {
-            console.log("⚠️ No alarmDuration found, using DB default: 0");
-            form.timer = 0;
-        }
+// 🔥 Watch เพื่อดึงค่าเดิมมาใส่ Form ทุกครั้งที่เปิด Modal
+watch(
+  () => [props.isOpen, props.device], 
+  ([isOpen, device]) => {
+    if (isOpen && device) {
+      form.name = device.name || '';
+      // ดึงค่า alarmDuration มาใส่ใน timer
+      form.timer = device.alarmDuration || 0; 
     }
-}, { immediate: true, deep: true });
+  },
+  { immediate: true }
+);
 
 const saveAll = async () => {
-    // 1. เตรียมข้อมูลที่จะส่ง (เหลือแค่ name กับ timer)
+    loading.value = true;
     const id = deviceIdDisplay.value;
+    
+    // เตรียมข้อมูลสำหรับส่งไป Backend
     const payload = { 
         name: form.name, 
-        // emergencyPhone: form.phone, // ❌ ตัดออก ไม่ส่งไปอัปเดตที่นี่แล้ว
         alarmDuration: Number(form.timer)
     };
 
-    // Optimistic UI Update
-    emit('updated', { id, ...payload }); 
-    emit('toast', 'Success', 'บันทึกข้อมูลเรียบร้อย', '✅', 'alert-success');
-    emit('close'); 
-
-    // Background Process
     try {
+        // 1. ส่งคำสั่งอัปเดต Database
         const updatePromise = api.put(`/devices/${id}`, payload);
+        
+        // 2. ส่งคำสั่ง MQTT ไปที่รถ (เพื่อให้รถตั้งเวลาใหม่ทันที)
+        // ❌ ของเดิม: { command: "set_timer", seconds: ... }
+        // ✅ แก้เป็น: ส่ง payload ให้ตรงกับที่ ESP32 รอรับ (ถ้ามี)
         const commandPromise = api.post(`/devices/${id}/command`, {
-            command: "set_timer",
-            seconds: Number(form.timer)
+             command: "set_timer",
+             value: Number(form.timer) // หรือ seconds แล้วแต่ ESP32 เขียนรับไว้
         });
 
+        // รอให้เสร็จทั้งคู่ (หรืออย่างน้อย Database เสร็จ)
         await Promise.all([updatePromise, commandPromise]);
-        console.log("✅ Background Save Complete");
+        
+        console.log("✅ Save Complete");
+
+        // แจ้งเตือนสำเร็จ
+        emit('updated', { id, ...payload }); 
+        emit('toast', { title: 'สำเร็จ', message: 'บันทึกข้อมูลเรียบร้อย', icon: '✅', color: 'alert-success' });
+        emit('close'); 
 
     } catch (err) {
         console.error("❌ Save Failed:", err);
-        emit('toast', 'Error', 'การบันทึกล้มเหลว! ข้อมูลอาจไม่ถูกบันทึก', '❌', 'alert-error');
+        emit('toast', { title: 'ผิดพลาด', message: 'บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง', icon: '❌', color: 'alert-error' });
+    } finally {
+        loading.value = false;
     }
 };
 </script>
