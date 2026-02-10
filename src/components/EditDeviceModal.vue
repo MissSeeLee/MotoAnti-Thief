@@ -22,7 +22,7 @@
           <label class="label pt-0 pb-1">
             <span class="label-text font-bold text-slate-600">ชื่อรถ / ยานพาหนะ</span>
           </label>
-          <input v-model="form.name" type="text" class="input input-bordered w-full bg-slate-50 focus:bg-white focus:border-blue-500 rounded-xl" placeholder="ตั้งชื่อรถของคุณ" />
+          <input v-model="form.name" type="text" class="input input-bordered w-full bg-slate-50 focus:bg-white focus:border-blue-500 rounded-xl" placeholder="เช่น Honda Wave, PCX..." />
         </div>
 
         <div class="form-control">
@@ -44,7 +44,7 @@
                 </div>
             </div>
             <label class="label pb-0">
-                <span class="label-text-alt text-slate-400">ค่านี้จะถูกส่งไปตั้งค่าที่รถทันที</span>
+                <span class="label-text-alt text-slate-400">ค่านี้จะถูกส่งไปตั้งค่าที่รถทันที (ถ้าออนไลน์)</span>
             </label>
         </div>
 
@@ -75,13 +75,12 @@ const form = reactive({
 
 const deviceIdDisplay = computed(() => props.device?.deviceId || props.device?.id || '');
 
-// 🔥 Watch เพื่อดึงค่าเดิมมาใส่ Form ทุกครั้งที่เปิด Modal
+// Watch เพื่อดึงค่าเดิมมาใส่ Form
 watch(
   () => [props.isOpen, props.device], 
   ([isOpen, device]) => {
     if (isOpen && device) {
       form.name = device.name || '';
-      // ดึงค่า alarmDuration มาใส่ใน timer
       form.timer = device.alarmDuration || 0; 
     }
   },
@@ -92,37 +91,38 @@ const saveAll = async () => {
     loading.value = true;
     const id = deviceIdDisplay.value;
     
-    // เตรียมข้อมูลสำหรับส่งไป Backend
-    const payload = { 
+    // Payload สำหรับ Database (อันนี้เดิมๆ ไม่ต้องแก้ ถ้ามันบันทึกได้แล้ว)
+    const dbPayload = { 
         name: form.name, 
-        alarmDuration: Number(form.timer)
+        alarmDuration: Number(form.timer) 
     };
 
     try {
-        // 1. ส่งคำสั่งอัปเดต Database
-        const updatePromise = api.put(`/devices/${id}`, payload);
+        // 1. อัปเดต Database
+        await api.put(`/devices/${id}`, dbPayload);
         
-        // 2. ส่งคำสั่ง MQTT ไปที่รถ (เพื่อให้รถตั้งเวลาใหม่ทันที)
-        // ❌ ของเดิม: { command: "set_timer", seconds: ... }
-        // ✅ แก้เป็น: ส่ง payload ให้ตรงกับที่ ESP32 รอรับ (ถ้ามี)
-        const commandPromise = api.post(`/devices/${id}/command`, {
-             command: "set_timer",
-             value: Number(form.timer) // หรือ seconds แล้วแต่ ESP32 เขียนรับไว้
-        });
-
-        // รอให้เสร็จทั้งคู่ (หรืออย่างน้อย Database เสร็จ)
-        await Promise.all([updatePromise, commandPromise]);
+        // 2. ส่งคำสั่งไปที่รถ (แก้ตรงนี้!)
+        try {
+            await api.post(`/devices/${id}/command`, {
+                 command: "set_timer",
+                 // ✅ แก้จาก value เป็น seconds ตามที่ Error บอก
+                 seconds: Number(form.timer) 
+            });
+            console.log("✅ Command sent to device (seconds)");
+        } catch (cmdErr) {
+            console.warn("⚠️ Device might be offline:", cmdErr);
+        }
         
-        console.log("✅ Save Complete");
+        console.log("✅ Update Complete");
 
-        // แจ้งเตือนสำเร็จ
-        emit('updated', { id, ...payload }); 
+        emit('updated', { id, ...dbPayload }); 
         emit('toast', { title: 'สำเร็จ', message: 'บันทึกข้อมูลเรียบร้อย', icon: '✅', color: 'alert-success' });
         emit('close'); 
 
     } catch (err) {
         console.error("❌ Save Failed:", err);
-        emit('toast', { title: 'ผิดพลาด', message: 'บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง', icon: '❌', color: 'alert-error' });
+        const msg = err.response?.data?.message || err.message;
+        emit('toast', { title: 'ผิดพลาด', message: `บันทึกไม่สำเร็จ: ${msg}`, icon: '❌', color: 'alert-error' });
     } finally {
         loading.value = false;
     }

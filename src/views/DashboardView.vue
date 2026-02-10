@@ -450,16 +450,25 @@ const openGeofencePanel = () => {
 
 // 1. ฟังก์ชันซูมไปที่รถเมื่อกดเปิดสวิตช์
 const handleZoomToCar = () => {
-  if (currentDeviceId.value && mapViewerRef.value) {
-    const v = vehicles[currentDeviceId.value];
-    if (v) {
-      // อัปเดตตำแหน่ง draft ให้เป็นรถปัจจุบันทันที
-      draftGeofence.lat = v.lat;
-      draftGeofence.lng = v.lng;
-      // สั่ง Map ซูม
-      mapViewerRef.value.focusCar(currentDeviceId.value);
+    if (currentDeviceId.value && mapViewerRef.value) {
+        const v = vehicles[currentDeviceId.value];
+        if (v) {
+            draftGeofence.lat = v.lat;
+            draftGeofence.lng = v.lng;
+            
+            // ✅ เช็คว่าเป็นมือถือหรือไม่
+            const isMobile = window.innerWidth < 768;
+            
+            if (isMobile) {
+                // ถ้าเป็นมือถือ: ให้ Offset 150px (ดันรถขึ้นไป 150px เพื่อหนี Panel)
+                // ปรับตัวเลข 150 ได้ตามความสูงของ Panel คุณ
+                mapViewerRef.value.focusCarWithOffset(currentDeviceId.value, 150);
+            } else {
+                // ถ้าเป็นคอม: ซูมปกติ
+                mapViewerRef.value.focusCar(currentDeviceId.value);
+            }
+        }
     }
-  }
 };
 
 // 2. ฟังก์ชันปิด Geofence ทันทีเมื่อกดปิดสวิตช์

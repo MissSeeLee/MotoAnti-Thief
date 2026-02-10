@@ -52,7 +52,7 @@ const createCustomIcon = (vehicleId, name) => {
       </div>
     `,
     iconSize: [40, 40],
-    iconAnchor: [20, 40], // จุดชี้อยู่ตรงกลางล่าง
+    iconAnchor: [20, 40],
     popupAnchor: [0, -40]
   });
 };
@@ -175,6 +175,27 @@ const focusLatLn = (lat, lng, zoom = 16) => {
   if (!map.value) return;
   map.value.setView([lat, lng], zoom);
 };
+const focusCarWithOffset = (deviceId, offsetY = 0) => {
+    const marker = markers[deviceId];
+    if (marker && map.value) {
+        const latLng = marker.getLatLng();
+        
+        // 1. แปลงพิกัดรถ เป็นจุด Pixel บนหน้าจอ
+        const point = map.value.project(latLng, 16); // ใช้ zoom level 16 ในการคำนวณ
+        
+        // 2. บวกค่า Y เพื่อขยับจุดกึ่งกลางลงมาข้างล่าง (ทำให้รถดูเหมือนลอยขึ้นข้างบน)
+        // ถ้า offsetY เป็นบวก = กล้องขยับลง = รถขยับขึ้น
+        point.y = point.y + offsetY; 
+        
+        // 3. แปลงกลับเป็น LatLng
+        const newCenter = map.value.unproject(point, 16);
+        
+        // 4. สั่งบินไปจุดใหม่
+        map.value.flyTo(newCenter, 16, { duration: 1.0 });
+        
+        marker.openPopup();
+    }
+};
 
 // Lifecycle Hooks
 onMounted(() => {
@@ -195,7 +216,9 @@ onUnmounted(() => {
 watch(() => props.data, updateMarkersDraw, { deep: true });
 watch(() => props.geofence, updateGeofenceDraw, { deep: true });
 
-defineExpose({ focusCar, focusLatLn });
+defineExpose({ focusCar, focusLatLn ,focusCarWithOffset});
+
+
 </script>
 
 <style>
