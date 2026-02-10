@@ -1,16 +1,16 @@
 <template>
   <Transition 
-     enter-active-class="transition duration-300 ease-out" 
-     enter-from-class="opacity-0 translate-y-10" 
-     enter-to-class="opacity-100 translate-y-0" 
-     leave-active-class="transition duration-200 ease-in" 
-     leave-from-class="opacity-100 translate-y-0" 
-     leave-to-class="opacity-0 translate-y-10"
+      enter-active-class="transition duration-300 ease-out" 
+      enter-from-class="opacity-0 translate-y-10" 
+      enter-to-class="opacity-100 translate-y-0" 
+      leave-active-class="transition duration-200 ease-in" 
+      leave-from-class="opacity-100 translate-y-0" 
+      leave-to-class="opacity-0 translate-y-10"
   >
     <div v-if="isOpen" 
-         class="absolute z-[500] 
+         class="fixed z-[500] 
                 bottom-0 left-0 right-0 p-4 
-                md:left-auto md:right-6 md:bottom-6 md:w-96 md:p-0">
+                md:top-24 md:left-auto md:right-6 md:bottom-auto md:w-96 md:p-0">
        
        <div class="bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.15)] border border-white/50 overflow-hidden flex flex-col w-full">
           
@@ -20,7 +20,7 @@
                   <div>
                     <h3 class="font-bold text-slate-800 leading-tight">Geofence</h3>
                     <p class="text-[10px] text-slate-500 font-medium">
-                        สถานะ: <span :class="localGeofence.enabled ? 'text-green-600' : 'text-slate-400'">{{ localGeofence.enabled ? 'ทำงานอยู่' : 'ปิดการทำงาน' }}</span>
+                        สถานะ: <span :class="localGeofence.enabled ? 'text-green-600 font-bold' : 'text-slate-400'">{{ localGeofence.enabled ? 'ทำงานอยู่' : 'ปิดการทำงาน' }}</span>
                     </p>
                   </div>
               </div>
@@ -31,7 +31,7 @@
               <div class="flex items-center justify-between p-3 rounded-xl border transition-all duration-300"
                    :class="localGeofence.enabled ? 'bg-purple-50 border-purple-200' : 'bg-slate-50 border-slate-100'">
                   <span class="text-sm font-bold text-slate-700">เปิดระบบแจ้งเตือน</span>
-                  <input type="checkbox" v-model="localGeofence.enabled" @change="handleToggle" 
+                  <input type="checkbox" v-model="localGeofence.enabled" @change="handleToggleChange" 
                          :disabled="readOnly"
                          class="toggle toggle-success toggle-md disabled:opacity-50" />
               </div>
@@ -77,30 +77,42 @@
 <script setup>
 import { reactive, watch } from 'vue';
 
-// ✅ เพิ่ม prop readOnly
 const props = defineProps(['isOpen', 'geofenceData', 'loading', 'readOnly']);
-const emit = defineEmits(['close', 'save', 'update:data']);
+// เพิ่ม 'zoom-to-car' และ 'disable-geofence' ใน emits
+const emit = defineEmits(['close', 'save', 'update:data', 'zoom-to-car', 'disable-geofence']);
 
 const localGeofence = reactive({ ...props.geofenceData });
 
+// Sync data from props
 watch(() => props.geofenceData, (newVal) => {
-    if (!props.loading) Object.assign(localGeofence, newVal);
+    if (!props.loading && newVal) {
+        Object.assign(localGeofence, newVal);
+    }
+}, { deep: true, immediate: true });
+
+// Sync local changes back to parent for live preview (drawing circle on map)
+watch(localGeofence, (newVal) => {
+    if(!props.readOnly) emit('update:data', newVal);
 }, { deep: true });
 
-watch(localGeofence, (newVal) => {
-    // ถ้า ReadOnly ไม่ต้องส่ง event update กลับไป (ป้องกันการขยับ map เล่นแล้วค่าเปลี่ยน)
-    if(!props.readOnly) emit('update:data', newVal);
-});
+const handleToggleChange = () => {
+    if (props.readOnly) return;
 
-const handleToggle = () => {
-    if (props.readOnly) return; // ห้ามกด
-    if (localGeofence.enabled === false) {
-        emit('save', localGeofence);
-    } 
+    if (localGeofence.enabled) {
+        // กรณี: กดเปิด (ON)
+        // 1. สั่งให้ซูมไปที่รถ (Zoom to car)
+        emit('zoom-to-car');
+        // 2. ข้อมูลอื่นๆ จะถูกตั้งค่าผ่าน UI และรอ user กด 'บันทึกตำแหน่งนี้'
+    } else {
+        // กรณี: กดปิด (OFF)
+        // 1. สั่งปิด Geofence ทันที หรือ บันทึกสถานะปิด
+        emit('disable-geofence'); // ส่ง event บอกแม่ว่า "ปิด geofence เดี๋ยวนี้"
+    }
 };
 
 const save = () => {
     if (props.readOnly) return;
+    // ส่งข้อมูลกลับไปบันทึก
     emit('save', localGeofence);
 };
 </script>

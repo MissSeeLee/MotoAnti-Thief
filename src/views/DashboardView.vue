@@ -1,6 +1,7 @@
 <template>
-  <div class="flex h-dvh w-screen overflow-hidden bg-slate-100 font-sans relative">
-    
+  <div
+    class="flex h-dvh w-screen overflow-hidden bg-slate-100 font-sans relative"
+  >
     <SideBar
       class="hidden md:flex flex-none w-72 z-30 shadow-xl border-r border-slate-200"
       :activeDeviceId="currentDeviceId"
@@ -15,7 +16,7 @@
       @open-geofence="openGeofencePanel"
       @view-history="goToHistory"
       @find-bike="findMyBike"
-      @toast="triggerToast" 
+      @toast="triggerToast"
     />
 
     <div
@@ -38,7 +39,12 @@
         :activeDeviceId="currentDeviceId"
         :devices="devicesArray"
         :isOwner="isOwner"
-        @select-device="(id) => { handleSelectDevice(id); isMobileMenuOpen = false; }"
+        @select-device="
+          (id) => {
+            handleSelectDevice(id);
+            isMobileMenuOpen = false;
+          }
+        "
         @logout="handleLogout"
         @add-device="showAddDeviceModal = true"
         @delete-device="handleDirectDelete"
@@ -55,8 +61,19 @@
       @click="isMobileMenuOpen = true"
       class="md:hidden absolute top-4 left-4 z-40 btn btn-circle btn-sm bg-white shadow-md border-slate-100 text-slate-700"
     >
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke-width="1.5"
+        stroke="currentColor"
+        class="w-6 h-6"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
+        />
       </svg>
     </button>
 
@@ -70,7 +87,11 @@
         class="absolute inset-0 w-full h-full z-0"
       />
 
-      <StatusCard :vehicle="currentVehicle" />
+      <StatusCard
+        v-if="!showGeofencePanel"
+        :vehicle="currentVehicle"
+        @focus="handleFocusCar"
+      />
 
       <GeofencePanel
         :isOpen="showGeofencePanel"
@@ -80,6 +101,8 @@
         @update:data="(val) => Object.assign(draftGeofence, val)"
         @save="saveGeofence"
         @close="showGeofencePanel = false"
+        @zoom-to-car="handleZoomToCar"
+        @disable-geofence="handleDisableGeofence"
       />
 
       <SecurityAlert
@@ -92,6 +115,7 @@
         @mute-vehicle="handleRemoteStopAlarm"
         @trigger-toast="triggerToast"
       />
+
       <AddDeviceModal
         v-if="showAddDeviceModal && isOwner"
         :isOpen="showAddDeviceModal"
@@ -107,7 +131,6 @@
         @deleted="handleDeviceDeleted"
         @toast="triggerToast"
       />
-
       <ShareDeviceModal
         v-if="showShareModal"
         :isOpen="showShareModal"
@@ -117,15 +140,37 @@
       />
 
       <Transition name="toast">
-        <div v-if="showToast" class="fixed top-5 right-5 z-[9999] flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl backdrop-blur-md min-w-[300px] border transition-all duration-300" :class="toastData.colorClass">
-            <div class="text-2xl">{{ toastData.icon }}</div>
-            <div class="flex-1">
-                <h3 class="font-bold text-sm tracking-wide">{{ toastData.title }}</h3>
-                <p class="text-xs opacity-90">{{ toastData.message }}</p>
-            </div>
-            <button @click="showToast = false" class="opacity-60 hover:opacity-100">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
+        <div
+          v-if="showToast"
+          class="fixed top-5 right-5 z-[9999] flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl backdrop-blur-md min-w-[300px] border transition-all duration-300"
+          :class="toastData.colorClass"
+        >
+          <div class="text-2xl">{{ toastData.icon }}</div>
+          <div class="flex-1">
+            <h3 class="font-bold text-sm tracking-wide">
+              {{ toastData.title }}
+            </h3>
+            <p class="text-xs opacity-90">{{ toastData.message }}</p>
+          </div>
+          <button
+            @click="showToast = false"
+            class="opacity-60 hover:opacity-100"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
         </div>
       </Transition>
     </div>
@@ -147,7 +192,6 @@ import EditDeviceModal from "../components/EditDeviceModal.vue";
 import ShareDeviceModal from "../components/ShareDeviceModal.vue";
 import GeofencePanel from "../components/GeofencePanel.vue";
 import StatusCard from "../components/StatusCard.vue";
-import { calculateDistance } from "../utils/geo";
 
 const router = useRouter();
 
@@ -168,7 +212,12 @@ const mapViewerRef = ref(null);
 const isMobileMenuOpen = ref(false);
 
 // Geofence
-const draftGeofence = reactive({ enabled: false, radius: 200, lat: 13.7563, lng: 100.5018 });
+const draftGeofence = reactive({
+  enabled: false,
+  radius: 200,
+  lat: 13.7563,
+  lng: 100.5018,
+});
 const showGeofencePanel = ref(false);
 
 // Modals
@@ -189,32 +238,53 @@ const audio = new Audio("/alert.mp3");
 
 // Toast State
 const showToast = ref(false);
-const toastData = reactive({ title: "", message: "", icon: "", colorClass: "" });
+const toastData = reactive({
+  title: "",
+  message: "",
+  icon: "",
+  colorClass: "",
+});
 
-// ✅ ฟังก์ชันแสดง Toast (รับได้ทั้งแบบแยก args และแบบ Object)
+// ✅ Toast Function
 const triggerToast = (arg1, arg2, arg3, arg4) => {
-  if (typeof arg1 === 'object') {
-     // กรณีรับมาเป็น Object { title, message, icon, color }
-     toastData.title = arg1.title;
-     toastData.message = arg1.message;
-     toastData.icon = arg1.icon;
-     
-     // แปลงสี
-     const color = arg1.color || '';
-     if (color.includes('success')) toastData.colorClass = 'alert-success bg-emerald-600/90 text-white';
-     else if (color.includes('error')) toastData.colorClass = 'alert-error bg-rose-600/90 text-white';
-     else if (color.includes('warning')) toastData.colorClass = 'alert-warning bg-amber-500/90 text-white';
-     else toastData.colorClass = 'bg-slate-700/90 text-white';
+  let title, message, icon, colorCode;
+
+  if (typeof arg1 === "object") {
+    title = arg1.title;
+    message = arg1.message;
+    icon = arg1.icon;
+    colorCode = arg1.color || "";
   } else {
-     // กรณีรับมาเป็น (title, message, icon, colorClass)
-     toastData.title = arg1;
-     toastData.message = arg2;
-     toastData.icon = arg3;
-     toastData.colorClass = arg4;
+    title = arg1;
+    message = arg2;
+    icon = arg3;
+    colorCode = arg4 || "";
   }
-  
+
+  toastData.title = title;
+  toastData.message = message;
+  toastData.icon = icon;
+
+  if (colorCode.includes("success")) {
+    toastData.colorClass =
+      "bg-emerald-600/90 text-white border border-emerald-500/50 shadow-lg shadow-emerald-900/20";
+  } else if (colorCode.includes("error")) {
+    toastData.colorClass =
+      "bg-rose-600/90 text-white border border-rose-500/50 shadow-lg shadow-rose-900/20";
+  } else if (colorCode.includes("warning")) {
+    toastData.colorClass =
+      "bg-amber-500/90 text-white border border-amber-400/50 shadow-lg shadow-amber-900/20";
+  } else if (colorCode.includes("info")) {
+    toastData.colorClass =
+      "bg-blue-600/90 text-white border border-blue-500/50 shadow-lg shadow-blue-900/20";
+  } else {
+    toastData.colorClass =
+      "bg-slate-700/90 text-white border border-slate-600 shadow-lg";
+  }
+
   showToast.value = true;
-  setTimeout(() => (showToast.value = false), 3000);
+  if (toastData.timer) clearTimeout(toastData.timer);
+  toastData.timer = setTimeout(() => (showToast.value = false), 3000);
 };
 
 const devicesArray = computed(() => Object.values(vehicles));
@@ -228,15 +298,19 @@ const displayGeofence = computed(() => {
 const fetchInitialData = async () => {
   try {
     const res = await api.get("/devices");
-    if (typeof res.data === "string" && res.data.includes("<!DOCTYPE html>")) throw new Error("Server returned HTML");
+    if (typeof res.data === "string" && res.data.includes("<!DOCTYPE html>"))
+      throw new Error("Server returned HTML");
 
     let devicesList = [];
     if (Array.isArray(res.data)) devicesList = res.data;
-    else if (res.data?.data && Array.isArray(res.data.data)) devicesList = res.data.data;
-    else if (res.data?.devices && Array.isArray(res.data.devices)) devicesList = res.data.devices;
+    else if (res.data?.data && Array.isArray(res.data.data))
+      devicesList = res.data.data;
+    else if (res.data?.devices && Array.isArray(res.data.devices))
+      devicesList = res.data.devices;
 
     if (devicesList.length === 0) {
-      if (res.status === 200) Object.keys(vehicles).forEach((k) => delete vehicles[k]);
+      if (res.status === 200)
+        Object.keys(vehicles).forEach((k) => delete vehicles[k]);
       return;
     }
     Object.keys(vehicles).forEach((key) => delete vehicles[key]);
@@ -265,42 +339,57 @@ const fetchInitialData = async () => {
       };
     });
 
-    if ((!currentDeviceId.value || !vehicles[currentDeviceId.value]) && devicesList.length > 0) {
+    if (
+      (!currentDeviceId.value || !vehicles[currentDeviceId.value]) &&
+      devicesList.length > 0
+    ) {
       currentDeviceId.value = devicesList[0].deviceId;
     }
   } catch (e) {
     console.error("Fetch Data Error:", e);
-    if (e.message !== "Network Error") triggerToast("Connection Error", "ไม่สามารถโหลดข้อมูลอุปกรณ์ได้", "⚠️", "alert-error");
+    if (e.message !== "Network Error")
+      triggerToast(
+        "Connection Error",
+        "ไม่สามารถโหลดข้อมูลอุปกรณ์ได้",
+        "⚠️",
+        "alert-error"
+      );
   }
 };
 
-// Event Handlers
+// --- Event Handlers ---
+
+const handleFocusCar = () => {
+  if (currentDeviceId.value && mapViewerRef.value) {
+    mapViewerRef.value.focusCar(currentDeviceId.value);
+  }
+};
+
 const handleDeviceAdded = () => {
   showAddDeviceModal.value = false;
   fetchInitialData();
   triggerToast("Success", "เพิ่มอุปกรณ์เรียบร้อย", "🎉", "alert-success");
 };
+
 const openSettingsModal = (deviceFromSidebar) => {
-  // ✅ แก้ตรงนี้: ดึงข้อมูลล่าสุดจาก vehicles object โดยใช้ ID
-  // เพื่อให้มั่นใจว่าได้ค่าล่าสุด (เช่น alarmDuration) ที่เพิ่งโหลดมา
   const deviceId = deviceFromSidebar.deviceId || deviceFromSidebar.id;
-  const latestDeviceData = vehicles[deviceId]; 
-
+  const latestDeviceData = vehicles[deviceId];
   if (latestDeviceData) {
-      editingDevice.value = latestDeviceData; // ส่งตัวล่าสุดเข้า Modal
+    editingDevice.value = latestDeviceData;
   } else {
-      editingDevice.value = deviceFromSidebar; // กันเหนียวถ้าหาไม่เจอ
+    editingDevice.value = deviceFromSidebar;
   }
-
   showGeofencePanel.value = false;
   isMobileMenuOpen.value = false;
   showSettingsModal.value = true;
 };
+
 const handleOpenShare = (d) => {
   sharingDevice.value = d;
   showShareModal.value = true;
   isMobileMenuOpen.value = false;
 };
+
 const handleDeviceUpdated = (newData) => {
   if (vehicles[newData.id]) {
     vehicles[newData.id].name = newData.name;
@@ -308,6 +397,7 @@ const handleDeviceUpdated = (newData) => {
   }
   triggerToast("Saved", "บันทึกข้อมูลเรียบร้อย", "💾", "alert-success");
 };
+
 const handleDeviceDeleted = (deletedId) => {
   delete vehicles[deletedId];
   triggerToast("Deleted", "ลบอุปกรณ์แล้ว", "🗑️", "alert-warning");
@@ -316,6 +406,7 @@ const handleDeviceDeleted = (deletedId) => {
     currentDeviceId.value = keys.length > 0 ? keys[0] : "";
   }
 };
+
 const handleDirectDelete = async (device) => {
   if (!confirm(`ยืนยันการลบ "${device.name || device.id}"?`)) return;
   try {
@@ -325,7 +416,9 @@ const handleDirectDelete = async (device) => {
     triggerToast("Error", "ลบไม่สำเร็จ", "❌", "alert-error");
   }
 };
+
 const goToHistory = (id) => router.push(`/history/${id}`);
+
 const findMyBike = async (id) => {
   try {
     const targetId = id || currentDeviceId.value;
@@ -336,25 +429,46 @@ const findMyBike = async (id) => {
     triggerToast("Error", "ส่งคำสั่งไม่สำเร็จ", "❌", "alert-error");
   }
 };
+
 const openGeofencePanel = () => {
   const v = vehicles[currentDeviceId.value];
   if (v && v.geofence) {
     Object.assign(draftGeofence, v.geofence);
   } else if (v) {
-    // ถ้ายังไม่เคยตั้ง ให้ใช้ตำแหน่งรถปัจจุบันเป็นจุดเริ่มต้น
     draftGeofence.lat = v.lat;
     draftGeofence.lng = v.lng;
   }
-  
+
   showGeofencePanel.value = true;
   isMobileMenuOpen.value = false;
 
-  // ✅ สั่ง Map ให้ Focus ไปที่จุด Geofence
+  // Zoom ไปที่ Geofence ถ้ามี
   if (mapViewerRef.value && draftGeofence.lat !== 0) {
-      // ใช้ zoom ระดับ 15 กำลังดี (เห็นซอย เห็นถนนชัด แต่ไม่ใกล้เกินไป)
-      mapViewerRef.value.focusLatLn(draftGeofence.lat, draftGeofence.lng, 15);
+    mapViewerRef.value.focusLatLn(draftGeofence.lat, draftGeofence.lng, 15);
   }
 };
+
+// 1. ฟังก์ชันซูมไปที่รถเมื่อกดเปิดสวิตช์
+const handleZoomToCar = () => {
+  if (currentDeviceId.value && mapViewerRef.value) {
+    const v = vehicles[currentDeviceId.value];
+    if (v) {
+      // อัปเดตตำแหน่ง draft ให้เป็นรถปัจจุบันทันที
+      draftGeofence.lat = v.lat;
+      draftGeofence.lng = v.lng;
+      // สั่ง Map ซูม
+      mapViewerRef.value.focusCar(currentDeviceId.value);
+    }
+  }
+};
+
+// 2. ฟังก์ชันปิด Geofence ทันทีเมื่อกดปิดสวิตช์
+const handleDisableGeofence = async () => {
+  if (!isOwner.value) return;
+  draftGeofence.enabled = false;
+  await saveGeofence(); // บันทึกทันที
+};
+
 const saveGeofence = async () => {
   if (!isOwner.value) return;
   isSending.value = true;
@@ -365,19 +479,44 @@ const saveGeofence = async () => {
       name: currentV.name,
       emergencyPhone: currentV.emergencyPhone,
     });
-    if (vehicles[currentDeviceId.value]) vehicles[currentDeviceId.value].geofence = { ...draftGeofence };
-    triggerToast("Success", "บันทึก Geofence ลงระบบแล้ว", "✅", "alert-success");
-    setTimeout(() => (showGeofencePanel.value = false), 500);
+
+    // อัปเดตข้อมูลใน Local State
+    if (vehicles[currentDeviceId.value]) {
+      vehicles[currentDeviceId.value].geofence = { ...draftGeofence };
+    }
+
+    // ถ้าเป็นการบันทึกแบบปิด ไม่ต้องแสดง Toast ใหญ่โตก็ได้ หรือแสดงให้รู้ว่าปิดแล้ว
+    if (draftGeofence.enabled) {
+      triggerToast(
+        "Success",
+        "บันทึก Geofence ลงระบบแล้ว",
+        "✅",
+        "alert-success"
+      );
+      setTimeout(() => (showGeofencePanel.value = false), 500); // ปิดหน้าต่างเมื่อบันทึกเปิดสำเร็จ
+    } else {
+      triggerToast(
+        "Info",
+        "ปิดระบบแจ้งเตือน Geofence แล้ว",
+        "🔕",
+        "alert-info"
+      );
+      // ไม่ต้องปิดหน้าต่าง ให้ User เห็นว่าปิดแล้ว
+    }
   } catch (e) {
     triggerToast("Error", "บันทึกผิดพลาด", "❌", "alert-error");
-  } finally { isSending.value = false; }
+  } finally {
+    isSending.value = false;
+  }
 };
+
 const handleMapCenterUpdate = (center) => {
   if (showGeofencePanel.value && isOwner.value) {
     draftGeofence.lat = center.lat;
     draftGeofence.lng = center.lng;
   }
 };
+
 const triggerAlert = (type, title, msg, icon) => {
   if (Date.now() < alertCooldown.value) return;
   isAlerting.value = true;
@@ -386,25 +525,31 @@ const triggerAlert = (type, title, msg, icon) => {
   alertIcon.value = icon;
   audio.play().catch((e) => console.log("Audio play failed:", e));
 };
+
 const muteAlert = () => {
   isAlerting.value = false;
   audio.pause();
   alertCooldown.value = Date.now() + 60000;
 };
+
 const handleRemoteStopAlarm = async () => {
   muteAlert();
   if (!currentDeviceId.value) return;
   try {
-    await api.post(`/devices/${currentDeviceId.value}/command`, { command: "stop_alarm" });
+    await api.post(`/devices/${currentDeviceId.value}/command`, {
+      command: "stop_alarm",
+    });
     triggerToast("Info", "ส่งคำสั่งปิดเสียงรถแล้ว", "🔕", "alert-info");
   } catch (e) {
     triggerToast("Error", "ส่งคำสั่งไม่สำเร็จ", "❌", "alert-error");
   }
 };
+
 const handleLogout = () => {
   localStorage.removeItem("token");
   router.push("/login");
 };
+
 const handleSelectDevice = (id) => {
   currentDeviceId.value = id;
   if (mapViewerRef.value && typeof mapViewerRef.value.focusCar === "function") {
@@ -412,6 +557,7 @@ const handleSelectDevice = (id) => {
   }
 };
 
+// Lifecycle
 onMounted(async () => {
   try {
     const token = localStorage.getItem("token");
@@ -422,28 +568,56 @@ onMounted(async () => {
         isOwner.value = payload.role === "ADMIN";
       }
     }
-  } catch (e) { isOwner.value = false; }
+  } catch (e) {
+    isOwner.value = false;
+  }
+
   await fetchInitialData();
-  socket.on("connect", () => { connectionStatus.value = "Online"; });
+
+  socket.on("connect", () => {
+    connectionStatus.value = "Online";
+  });
+
   socket.on("new_location", (data) => {
     if (vehicles[data.deviceId]) {
-      const bat = data.battery ?? data.currentBattery ?? vehicles[data.deviceId].battery;
-      vehicles[data.deviceId] = { ...vehicles[data.deviceId], lat: Number(data.lat), lng: Number(data.lng), speed: Number(data.speed), ign: !!data.ign, status: data.status || "ONLINE", battery: Number(bat) };
+      const bat =
+        data.battery ??
+        data.batt ??
+        data.currentBattery ??
+        vehicles[data.deviceId].battery;
+
+      vehicles[data.deviceId] = {
+        ...vehicles[data.deviceId],
+        lat: Number(data.lat),
+        lng: Number(data.lng),
+        speed: Number(data.speed),
+        ign: !!data.ign,
+        status: data.status || "ONLINE",
+        battery: Number(bat),
+      };
     }
   });
+
   socket.on("new_alert", (data) => {
     if (vehicles[data.deviceId]) {
-        /* ... logic alert ... */ 
+      // Alert Logic
     }
   });
 });
+
 onUnmounted(() => {
   if (socket) socket.disconnect();
   muteAlert();
 });
 </script>
-
 <style scoped>
-.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
-.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-20px); }
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
+}
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(-20px);
+}
 </style>

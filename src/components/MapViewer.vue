@@ -41,14 +41,13 @@ const getVehicleColor = (id) => {
 
 const createCustomIcon = (vehicleId, name) => {
   const color = getVehicleColor(vehicleId);
-  const displayName = name ? (name.length > 10 ? name.substring(0, 10) + '..' : name) : 'Unkown';
+  const displayName = name ? (name.length > 10 ? name.substring(0, 10) + '..' : name) : 'Unknown';
 
   return L.divIcon({
     className: 'custom-marker-container', 
     html: `
       <div class="marker-wrapper">
         <div class="marker-pin" style="background-color: ${color};"></div>
-        <div class="marker-pulse" style="background-color: ${color};"></div>
         <div class="marker-label">${displayName}</div>
       </div>
     `,
@@ -223,19 +222,6 @@ defineExpose({ focusCar, focusLatLn });
   bottom: 2px;
 }
 
-.marker-pulse {
-  position: absolute;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  opacity: 0.4;
-  bottom: -6px;
-  left: 50%;
-  transform: translateX(-50%);
-  animation: pulse-ring 2s infinite;
-  z-index: 10;
-}
-
 .marker-label {
   position: absolute;
   bottom: 25px; /* อยู่เหนือหมุด */
@@ -251,10 +237,7 @@ defineExpose({ focusCar, focusLatLn });
   z-index: 30;
 }
 
-@keyframes pulse-ring {
-  0% { transform: translateX(-50%) scale(0.5); opacity: 0.8; }
-  100% { transform: translateX(-50%) scale(1.5); opacity: 0; }
-}
+/* ลบ @keyframes pulse-ring ออกแล้ว */
 
 /* Leaflet Popup Clean Style */
 .leaflet-popup-content-wrapper {
