@@ -14,18 +14,17 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 const props = defineProps({
-  data: { type: Array, default: () => [] }, // รับเป็น Array จาก Dashboard
+  data: { type: Array, default: () => [] },
   geofence: { type: Object, default: () => ({ enabled: false, lat: 0, lng: 0, radius: 200 }) },
   isEditing: { type: Boolean, default: false } 
 });
 
 const emit = defineEmits(['update:center']);
 const map = ref(null);
-const markers = {}; // เก็บ Object ของ Marker โดยใช้ ID เป็น Key
+const markers = {}; 
 let geofenceCircle = null;
 const isMapReady = ref(false);
 
-// 🎨 Palette สี
 const vehicleColors = [
   '#ef4444', '#3b82f6', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316',
 ];
@@ -39,21 +38,32 @@ const getVehicleColor = (id) => {
   return vehicleColors[index];
 };
 
-const createCustomIcon = (vehicleId, name) => {
-  const color = getVehicleColor(vehicleId);
+// 🎨 ฟังก์ชันสร้างไอคอน (ปรับปรุงใหม่)
+const createCustomIcon = (vehicle) => {
+  const id = vehicle.id || vehicle.deviceId;
+  const name = vehicle.name || id;
+  const isOnline = vehicle.status === 'ONLINE'; // เช็คสถานะ
+
+  // ถ้า Online ใช้สีเดิม, ถ้า Offline ใช้สีเทา
+  const color = isOnline ? getVehicleColor(id) : '#94a3b8'; 
+  
+  // ตัดชื่อถ้ายาวเกิน
   const displayName = name ? (name.length > 10 ? name.substring(0, 10) + '..' : name) : 'Unknown';
+  
+  // เพิ่ม class 'marker-offline' ถ้าไม่ Online
+  const wrapperClass = isOnline ? '' : 'marker-offline';
 
   return L.divIcon({
     className: 'custom-marker-container', 
     html: `
-      <div class="marker-wrapper">
+      <div class="marker-wrapper ${wrapperClass}">
         <div class="marker-pin" style="background-color: ${color};"></div>
         <div class="marker-label">${displayName}</div>
       </div>
     `,
     iconSize: [40, 40],
-    iconAnchor: [20, 40],
-    popupAnchor: [0, -40]
+    iconAnchor: [20, 40], // จุดชี้อยู่ตรงกลางล่าง
+    popupAnchor: [0, -45]  // Popup อยู่เหนือหมุด
   });
 };
 
@@ -71,8 +81,6 @@ const initMap = () => {
   });
 
   isMapReady.value = true;
-  
-  // วาดครั้งแรก
   updateGeofenceDraw();
   updateMarkersDraw();
 };
@@ -81,7 +89,6 @@ const updateGeofenceDraw = () => {
   if (!map.value) return;
   const gf = props.geofence;
 
-  // ถ้าไม่มี Geofence หรือปิดอยู่ ให้ลบวงกลมออก
   if (!gf || !gf.enabled || !gf.lat || !gf.lng) {
     if (geofenceCircle) { 
         map.value.removeLayer(geofenceCircle); 
@@ -106,24 +113,24 @@ const updateGeofenceDraw = () => {
 const updateMarkersDraw = () => {
     if (!map.value || !props.data) return;
     
-    const vehicles = props.data; // Array ของรถ
+    const vehicles = props.data;
     const currentIds = new Set();
 
     vehicles.forEach(vehicle => {
         if (!vehicle.lat || !vehicle.lng) return;
         
-        const id = vehicle.id || vehicle.deviceId; // รองรับทั้ง id และ deviceId
+        const id = vehicle.id || vehicle.deviceId;
         if (!id) return;
 
         currentIds.add(id);
-        const name = vehicle.name || id;
 
         if (markers[id]) {
             // มีหมุดอยู่แล้ว -> ขยับตำแหน่ง
             markers[id].setLatLng([vehicle.lat, vehicle.lng]);
-            markers[id].setIcon(createCustomIcon(id, name)); // อัปเดตชื่อ/สีเผื่อเปลี่ยน
+            // อัปเดตไอคอน (เผื่อสถานะเปลี่ยน Online <-> Offline)
+            markers[id].setIcon(createCustomIcon(vehicle)); 
             
-            // อัปเดต Popup (ถ้าเปิดอยู่)
+            // อัปเดต Popup
             if (markers[id].getPopup() && markers[id].getPopup().isOpen()) {
                 markers[id].setPopupContent(buildPopupContent(vehicle));
             } else {
@@ -131,16 +138,16 @@ const updateMarkersDraw = () => {
             }
 
         } else {
-            // ยังไม่มีหมุด -> สร้างใหม่
+            // สร้างหมุดใหม่
             markers[id] = L.marker([vehicle.lat, vehicle.lng], { 
-                icon: createCustomIcon(id, name) 
+                icon: createCustomIcon(vehicle) 
             }).addTo(map.value);
             
             markers[id].bindPopup(buildPopupContent(vehicle));
         }
     });
 
-    // ลบหมุดที่ไม่มีในข้อมูลชุดใหม่ (เช่น รถถูกลบออก)
+    // ลบหมุดที่หายไป
     Object.keys(markers).forEach(id => {
         if (!currentIds.has(id)) {
             map.value.removeLayer(markers[id]);
@@ -150,18 +157,34 @@ const updateMarkersDraw = () => {
 };
 
 const buildPopupContent = (v) => {
+    const isOnline = v.status === 'ONLINE';
+    const statusColor = isOnline ? 'text-green-600' : 'text-slate-400';
+    const statusText = isOnline ? 'ONLINE' : 'OFFLINE';
+
     return `
-      <div class="text-sm">
-        <div class="font-bold text-slate-700">${v.name || v.id}</div>
-        <div class="text-xs text-slate-500 mt-1">
-           Speed: <span class="font-mono font-bold">${v.speed?.toFixed(1) || 0}</span> km/h<br>
-           Battery: ${v.battery || 0}%
+      <div class="text-sm min-w-[120px]">
+        <div class="font-bold text-slate-800 text-base mb-1">${v.name || v.id}</div>
+        
+        <div class="flex items-center gap-2 mb-2">
+            <span class="w-2 h-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-slate-400'}"></span>
+            <span class="text-xs font-bold ${statusColor}">${statusText}</span>
+        </div>
+
+        <div class="text-xs text-slate-500 space-y-1">
+           <div class="flex justify-between">
+              <span>ความเร็ว:</span>
+              <span class="font-mono font-bold text-slate-700">${v.speed?.toFixed(1) || 0} km/h</span>
+           </div>
+           <div class="flex justify-between">
+              <span>แบตเตอรี่:</span>
+              <span class="font-mono font-bold text-slate-700">${v.battery || 0}%</span>
+           </div>
         </div>
       </div>
     `;
 };
 
-// --- Exposed Functions (ให้ Parent เรียกใช้) ---
+// --- Exposed Functions ---
 
 const focusCar = (deviceId) => { 
     const marker = markers[deviceId];
@@ -175,31 +198,20 @@ const focusLatLn = (lat, lng, zoom = 16) => {
   if (!map.value) return;
   map.value.setView([lat, lng], zoom);
 };
+
 const focusCarWithOffset = (deviceId, offsetY = 0) => {
     const marker = markers[deviceId];
     if (marker && map.value) {
         const latLng = marker.getLatLng();
-        
-        // 1. แปลงพิกัดรถ เป็นจุด Pixel บนหน้าจอ
-        const point = map.value.project(latLng, 16); // ใช้ zoom level 16 ในการคำนวณ
-        
-        // 2. บวกค่า Y เพื่อขยับจุดกึ่งกลางลงมาข้างล่าง (ทำให้รถดูเหมือนลอยขึ้นข้างบน)
-        // ถ้า offsetY เป็นบวก = กล้องขยับลง = รถขยับขึ้น
+        const point = map.value.project(latLng, 16);
         point.y = point.y + offsetY; 
-        
-        // 3. แปลงกลับเป็น LatLng
         const newCenter = map.value.unproject(point, 16);
-        
-        // 4. สั่งบินไปจุดใหม่
         map.value.flyTo(newCenter, 16, { duration: 1.0 });
-        
         marker.openPopup();
     }
 };
 
-// Lifecycle Hooks
 onMounted(() => {
-    // รอ DOM พร้อมก่อน init map
     nextTick(() => {
         initMap();
     });
@@ -212,13 +224,10 @@ onUnmounted(() => {
     }
 });
 
-// Watchers
 watch(() => props.data, updateMarkersDraw, { deep: true });
 watch(() => props.geofence, updateGeofenceDraw, { deep: true });
 
 defineExpose({ focusCar, focusLatLn ,focusCarWithOffset});
-
-
 </script>
 
 <style>
@@ -231,7 +240,14 @@ defineExpose({ focusCar, focusLatLn ,focusCarWithOffset});
   height: 40px;
   display: flex;
   justify-content: center;
-  align-items: flex-end; /* ให้หมุดอยู่ด้านล่าง */
+  align-items: flex-end;
+  transition: all 0.3s ease; /* เพิ่ม Effect เวลาเปลี่ยนสถานะ */
+}
+
+/* 🔥 Style สำหรับรถ Offline */
+.marker-offline {
+  filter: grayscale(100%); /* ขาวดำ */
+  opacity: 0.7; /* จางลง */
 }
 
 .marker-pin {
@@ -243,11 +259,12 @@ defineExpose({ focusCar, focusLatLn ,focusCarWithOffset});
   z-index: 20;
   position: absolute;
   bottom: 2px;
+  transition: background-color 0.3s ease;
 }
 
 .marker-label {
   position: absolute;
-  bottom: 25px; /* อยู่เหนือหมุด */
+  bottom: 25px;
   background: rgba(255, 255, 255, 0.9);
   padding: 2px 6px;
   border-radius: 4px;
@@ -256,19 +273,22 @@ defineExpose({ focusCar, focusLatLn ,focusCarWithOffset});
   color: #333;
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
   white-space: nowrap;
-  pointer-events: auto; /* ให้คลิกได้ถ้าต้องการ */
+  pointer-events: auto;
   z-index: 30;
 }
 
-/* ลบ @keyframes pulse-ring ออกแล้ว */
-
 /* Leaflet Popup Clean Style */
 .leaflet-popup-content-wrapper {
-    border-radius: 8px;
+    border-radius: 12px; /* โค้งมนสวยขึ้น */
     padding: 0;
     overflow: hidden;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
 }
 .leaflet-popup-content {
-    margin: 10px 14px;
+    margin: 12px 16px;
+    line-height: 1.5;
+}
+.leaflet-popup-tip {
+    background: white;
 }
 </style>
