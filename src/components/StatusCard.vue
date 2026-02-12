@@ -76,13 +76,14 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref,toRefs } from 'vue';
 
 const props = defineProps(['vehicle']);
 // ✅ 1. เพิ่ม emit focus
 const emit = defineEmits(['focus']); 
 
 const isExpanded = ref(true); 
+const { vehicle } = toRefs(props);
 
 const toggleExpand = () => {
     isExpanded.value = !isExpanded.value;

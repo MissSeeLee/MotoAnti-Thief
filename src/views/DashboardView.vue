@@ -212,7 +212,7 @@ const mapViewerRef = ref(null);
 const isMobileMenuOpen = ref(false);
 
 // Realtime Offline Check
-let checkInterval = null; // ตัวแปรเก็บ Interval
+let checkInterval = null; 
 
 // Geofence
 const draftGeofence = reactive({
@@ -343,15 +343,25 @@ const fetchInitialData = async () => {
       const lastLoc = history.length > 0 ? history[0] : null;
       const batteryVal = d.currentBattery ?? d.battery ?? d.batt ?? 0;
 
+      // -----------------------------------------------------------
+      // 🔥 Logic: ดึงค่า ign ดิบๆ ออกมาก่อน
+      // -----------------------------------------------------------
+      const rawIgn = lastLoc?.ign ?? d.ign ?? "OFF";
+
       // คำนวณเวลาล่าสุด
       const lastUpdateStr = lastLoc?.createdAt || d.updatedAt || new Date();
       const lastUpdateDate = new Date(lastUpdateStr);
       const diffMinutes = (now - lastUpdateDate) / 1000 / 60;
 
-      // คำนวณสถานะจริง (DB อาจบอก ONLINE แต่ถ้าเก่านานแล้วต้อง OFFLINE)
+      // -----------------------------------------------------------
+      // 🔥 Logic: คำนวณสถานะ (Real Status)
+      // -----------------------------------------------------------
       let realStatus = d.currentStatus || "OFFLINE";
-      if (realStatus === 'ONLINE' && diffMinutes > 5) {
-          realStatus = 'OFFLINE';
+
+      if (rawIgn === "PARKED") {
+         realStatus = "PARKED"; 
+      } else if (realStatus === 'ONLINE' && diffMinutes > 5) {
+         realStatus = 'OFFLINE';
       }
 
       vehicles[d.deviceId] = {
@@ -365,10 +375,15 @@ const fetchInitialData = async () => {
         lng: Number(lastLoc?.lng) || Number(d.lng) || 0,
         speed: Number(lastLoc?.speed) || Number(d.speed) || 0,
         
-        // ใช้ logic ใหม่
+        // ใช้สถานะที่เราคำนวณใหม่ด้านบน
         status: realStatus,
-        ign: realStatus === 'ONLINE' ? !!(lastLoc?.ign ?? d.ign) : false,
-        lastUpdate: lastUpdateDate, // เก็บเวลาไว้ใช้กับ interval
+        
+        // -----------------------------------------------------------
+        // 🔥 Logic: Ign ต้องเป็น true ก็ต่อเมื่อ "ON" เท่านั้น
+        // -----------------------------------------------------------
+        ign: rawIgn === "ON", 
+        
+        lastUpdate: lastUpdateDate, 
 
         battery: Number(batteryVal),
         geofence: {
@@ -459,7 +474,7 @@ const findMyBike = async (id) => {
   try {
     const targetId = id || currentDeviceId.value;
     if (!targetId) return;
-    // ✅ เพิ่ม value: 1 เพื่อแก้ Error 400 Bad Request
+    // ✅ value: 1 แก้ 400 Bad Request
     await api.post(`/devices/${targetId}/command`, { 
         command: "find_bike",
         value: 1 
@@ -516,8 +531,6 @@ const saveGeofence = async () => {
     const currentV = vehicles[currentDeviceId.value];
     await api.put(`/devices/${currentDeviceId.value}`, {
       geofence: { ...draftGeofence },
-      name: currentV.name,
-      emergencyPhone: currentV.emergencyPhone,
     });
 
     if (vehicles[currentDeviceId.value]) {
@@ -563,7 +576,7 @@ const handleRemoteStopAlarm = async () => {
   muteAlert();
   if (!currentDeviceId.value) return;
   try {
-    // ✅ เพิ่ม value: 1 แก้ Error 400
+    // ✅ value: 1 แก้ 400 Bad Request
     await api.post(`/devices/${currentDeviceId.value}/command`, {
       command: "stop_alarm",
       value: 1
@@ -611,35 +624,125 @@ onMounted(async () => {
   });
 
   socket.on("new_location", (data) => {
+    // console.log("🔥 Socket Data:", data); // เปิดดูค่าจริงใน Console ได้
+
     if (vehicles[data.deviceId]) {
       const bat = data.battery ?? data.batt ?? data.currentBattery ?? vehicles[data.deviceId].battery;
+      
+      // 🔥 จุดที่แก้: รองรับค่า ign ทุกรูปแบบ (ไม่ว่าจะส่งมาเป็น "ON", "on", true, หรือ 1)
+      const rawVal = data.ign; 
+      const isIgnOn = (rawVal === "ON" || rawVal === "on" || rawVal === true || rawVal === 1 || rawVal === "1");
 
-      vehicles[data.deviceId] = {
-        ...vehicles[data.deviceId],
+      // กำหนดสถานะแสดงผล
+      let displayStatus = "ONLINE";
+      if (rawVal === "PARKED") {
+          displayStatus = "PARKED";
+      } else if (!isIgnOn) { 
+          // ถ้ากุญแจไม่เปิด ให้ถือว่า OFFLINE (หรือ IDLE)
+          displayStatus = "OFFLINE";
+      }
+
+      // อัปเดตข้อมูล (ใช้ Object.assign เพื่อรักษา Reactivity)
+      Object.assign(vehicles[data.deviceId], {
         lat: Number(data.lat),
         lng: Number(data.lng),
         speed: Number(data.speed),
-        ign: !!data.ign,
         
-        // 🔥 ถ้ามีข้อมูลเข้า ต้องเป็น ONLINE เสมอ + อัปเดตเวลาล่าสุด
-        status: "ONLINE",
-        lastUpdate: new Date(), 
+        // ✅ บังคับให้เป็น Boolean (True/False) ที่ถูกต้อง
+        ign: isIgnOn, 
         
-        battery: Number(bat),
-      };
+        status: displayStatus,
+        lastUpdate: new Date(),
+        battery: Number(bat)
+      });
+      
+      // console.log("✅ Vehicle State:", vehicles[data.deviceId].ign); 
     }
   });
 
+  // --------------------------------------------------------
+  // 🔥 แก้ไข Logic การแจ้งเตือน: แยกแยะประเภทข้อความ
+  // --------------------------------------------------------
   socket.on("new_alert", (data) => {
-    if (vehicles[data.deviceId]) {
-      // Alert Logic
+    if (!vehicles[data.deviceId]) return;
+
+    const msg = data.message || ""; 
+    const vehicleName = vehicles[data.deviceId].name || `รถรหัส ${data.deviceId}`;
+
+    // --- 🟡 1. กรณีแรงสั่นสะเทือนเล็กน้อย (BUMP) -> แสดงแค่ Toast ---
+    if (msg.includes("BUMP")) {
+        triggerToast("Status", `⚠️ มีคนโดนรถ ${vehicleName}: ตรวจพบแรงสั่นสะเทือนเล็กน้อย`, "⚠️", "alert-warning");
+        return; // จบการทำงานทันที ไม่ต้องไปเช็คเงื่อนไขอื่น
     }
-  });
+
+    // --- 🔴 2. กลุ่มอันตรายร้ายแรง (Critical) -> เปิด Modal แดง + เสียงไซเรน ---
+    if (msg.includes("THEFT") || msg.includes("ACCIDENT") || msg.includes("FALLEN")) {
+        
+        let title = "ตรวจพบสิ่งผิดปกติ!";
+        let icon = "🚨";
+        let displayMsg = msg;
+
+        if (msg.includes("THEFT")) {
+            title = "⚠️ แจ้งเตือนขโมย!";
+            displayMsg = `รถ ${vehicleName} มีการสั่นสะเทือนรุนแรง (อาจมีการโจรกรรม)`;
+        } else if (msg.includes("ACCIDENT") || msg.includes("FALLEN")) {
+            title = "🆘 แจ้งเตือนอุบัติเหตุ!";
+            displayMsg = `รถ ${vehicleName} ตรวจพบรถล้ม หรือการกระแทกอย่างรุนแรง`;
+            icon = "🚑";
+        }
+
+        // สั่งเปิด Modal แดง (Security Alert)
+        triggerAlert("Security", title, displayMsg, icon);
+        // ขึ้น Toast ควบคู่ไปด้วย
+        triggerToast("Critical", title, icon, "alert-error");
+    } 
+    
+    // --- 🟢 3. กลุ่มสถานะระบบ (Info) -> แสดงแค่ Toast ---
+    else if (msg.includes("UNLOCKED") || msg.includes("ARMED") || msg.includes("STOPPED") || msg.includes("SUCCESS") || msg.includes("UPDATED")) {
+        
+        let icon = "ℹ️";
+        let color = "alert-info";
+        let text = msg;
+
+        if (msg.includes("ARMED")) {
+            icon = "🔒"; 
+            text = `ระบบกันขโมยของ ${vehicleName} ทำงานแล้ว (Armed)`;
+            color = "alert-success";
+        } else if (msg.includes("UNLOCKED")) {
+            icon = "🔓";
+            text = `ปลดล็อคระบบ ${vehicleName} แล้ว`;
+            color = "alert-success";
+        } else if (msg.includes("STOPPED")) {
+            icon = "🔕";
+            text = "ปิดเสียงสัญญาณแล้ว";
+        } else if (msg.includes("UPDATED")) {
+            icon = "💾";
+            text = "อัปเดตข้อมูลสำเร็จ";
+            color = "alert-success";
+        }
+
+        triggerToast("System", text, icon, color);
+    }
+    
+    // --- 🟠 4. กลุ่มแจ้งเตือนทั่วไป (Warning) ---
+    else if (msg.includes("WAITING") || msg.includes("IGN_OFF")) {
+        triggerToast("Status", "กำลังเตรียมเข้าโหมดกันขโมย...", "⏳", "alert-warning");
+    }
+
+    // --- 🔵 5. กลุ่มค้นหารถ (Find My Bike) ---
+    else if (msg.includes("FINDING")) {
+        if (msg.includes("START")) {
+            triggerToast("Find Bike", "ส่งเสียงค้นหารถ...", "📢", "alert-info");
+        } else {
+            triggerToast("Find Bike", "จบการค้นหา", "🔇", "alert-info");
+        }
+    }
 });
+}); // <--- ✅ จุดที่เติมวงเล็บปิดให้ครับ
 
 onUnmounted(() => {
   if (socket) socket.disconnect();
-  if (checkInterval) clearInterval(checkInterval); // อย่าลืมเคลียร์ Interval
+  if (checkInterval) clearInterval(checkInterval);
   muteAlert();
 });
 </script>
