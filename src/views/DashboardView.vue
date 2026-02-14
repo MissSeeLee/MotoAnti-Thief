@@ -435,9 +435,14 @@ const openSettingsModal = (deviceFromSidebar) => {
   showSettingsModal.value = true;
 };
 
-const handleOpenShare = (d) => {
-  sharingDevice.value = d;
-  showShareModal.value = true;
+const handleOpenShare = (device) => {
+  const deviceId = device.deviceId || device.id;
+  if (deviceId) {
+    // พาวิ่งไปหน้าจัดการการแชร์
+    router.push(`/sharing-management/${deviceId}`);
+  } else {
+    triggerToast("Error", "ไม่พบรหัสอุปกรณ์", "❌", "alert-error");
+  }
   isMobileMenuOpen.value = false;
 };
 
@@ -474,7 +479,6 @@ const findMyBike = async (id) => {
   try {
     const targetId = id || currentDeviceId.value;
     if (!targetId) return;
-    // ✅ value: 1 แก้ 400 Bad Request
     await api.post(`/devices/${targetId}/command`, { 
         command: "find_bike",
         value: 1 
@@ -676,7 +680,7 @@ onMounted(async () => {
     }
 
     // --- 🔴 2. กลุ่มอันตรายร้ายแรง (Critical) -> เปิด Modal แดง + เสียงไซเรน ---
-    if (msg.includes("THEFT") || msg.includes("ACCIDENT") || msg.includes("FALLEN")) {
+    if (msg.includes("THEFT") || msg.includes("ACCIDENT") || msg.includes("FALLEN")|| msg.includes("GEOFENCE")) {
         
         let title = "ตรวจพบสิ่งผิดปกติ!";
         let icon = "🚨";
@@ -689,7 +693,11 @@ onMounted(async () => {
             title = "🆘 แจ้งเตือนอุบัติเหตุ!";
             displayMsg = `รถ ${vehicleName} ตรวจพบรถล้ม หรือการกระแทกอย่างรุนแรง`;
             icon = "🚑";
+        }else if (msg.includes("GEOFENCE")) {
+            title = "🆘 แจ้งเตือน!";
+            displayMsg = `รถ ${vehicleName} ตรวจพบการออกจากขอบเขต!`;
         }
+
 
         // สั่งเปิด Modal แดง (Security Alert)
         triggerAlert("Security", title, displayMsg, icon);
@@ -698,7 +706,7 @@ onMounted(async () => {
     } 
     
     // --- 🟢 3. กลุ่มสถานะระบบ (Info) -> แสดงแค่ Toast ---
-    else if (msg.includes("UNLOCKED") || msg.includes("ARMED") || msg.includes("STOPPED") || msg.includes("SUCCESS") || msg.includes("UPDATED")) {
+    else if (msg.includes("UNLOCKED") || msg.includes("ARMED") || msg.includes("STOPPED") || msg.includes("SUCCESS") || msg.includes("UPDATED") || msg.includes("LOW")) {
         
         let icon = "ℹ️";
         let color = "alert-info";
@@ -719,6 +727,10 @@ onMounted(async () => {
             icon = "💾";
             text = "อัปเดตข้อมูลสำเร็จ";
             color = "alert-success";
+        }else if (msg.includes("LOW")) {
+            icon = "";
+            text = "แบตเตอร์รี่ต่ำ";
+            color = "alert-warning";
         }
 
         triggerToast("System", text, icon, color);
@@ -738,7 +750,8 @@ onMounted(async () => {
         }
     }
 });
-}); // <--- ✅ จุดที่เติมวงเล็บปิดให้ครับ
+}); 
+
 
 onUnmounted(() => {
   if (socket) socket.disconnect();

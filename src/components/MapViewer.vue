@@ -38,20 +38,18 @@ const getVehicleColor = (id) => {
   return vehicleColors[index];
 };
 
-// 🎨 ฟังก์ชันสร้างไอคอน (ปรับปรุงใหม่)
+// 🎨 1. ฟังก์ชันสร้างไอคอน (แสดงสีตามสถานะ: Online/Parked/Offline)
 const createCustomIcon = (vehicle) => {
   const id = vehicle.id || vehicle.deviceId;
   const name = vehicle.name || id;
-  const isOnline = vehicle.status === 'ONLINE'; // เช็คสถานะ
+  const status = vehicle.status; 
 
-  // ถ้า Online ใช้สีเดิม, ถ้า Offline ใช้สีเทา
-  const color = isOnline ? getVehicleColor(id) : '#94a3b8'; 
+  let color = '#94a3b8'; // Default: Offline (สีเทา)
+  if (status === 'ONLINE') color = getVehicleColor(id);
+  if (status === 'PARKED') color = '#f59e0b'; // Parked (สีส้ม)
   
-  // ตัดชื่อถ้ายาวเกิน
   const displayName = name ? (name.length > 10 ? name.substring(0, 10) + '..' : name) : 'Unknown';
-  
-  // เพิ่ม class 'marker-offline' ถ้าไม่ Online
-  const wrapperClass = isOnline ? '' : 'marker-offline';
+  const wrapperClass = status === 'OFFLINE' ? 'marker-offline' : '';
 
   return L.divIcon({
     className: 'custom-marker-container', 
@@ -62,9 +60,45 @@ const createCustomIcon = (vehicle) => {
       </div>
     `,
     iconSize: [40, 40],
-    iconAnchor: [20, 40], // จุดชี้อยู่ตรงกลางล่าง
-    popupAnchor: [0, -45]  // Popup อยู่เหนือหมุด
+    iconAnchor: [20, 40],
+    popupAnchor: [0, -45]
   });
+};
+
+// 📝 2. ปรับปรุง Popup: แสดง Status เด่นๆ และไม่มีความเร็วแล้ว
+const buildPopupContent = (v) => {
+    let statusColor = 'text-slate-400';
+    let statusBg = 'bg-slate-400';
+    let statusText = v.status || 'OFFLINE';
+
+    if (v.status === 'ONLINE') {
+        statusColor = 'text-emerald-600';
+        statusBg = 'bg-emerald-500';
+    } else if (v.status === 'PARKED') {
+        statusColor = 'text-amber-600';
+        statusBg = 'bg-amber-500';
+    }
+
+    return `
+      <div class="text-sm min-w-[140px] p-1">
+        <div class="font-black text-slate-800 text-base mb-2 border-b pb-1">${v.name || v.id}</div>
+        
+        <div class="flex items-center justify-between mb-3">
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-tight">สถานะ</span>
+            <div class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full ${statusBg} ${v.status === 'ONLINE' ? 'animate-pulse' : ''}"></span>
+                <span class="text-xs font-black ${statusColor}">${statusText}</span>
+            </div>
+        </div>
+
+        <div class="bg-slate-50 rounded-lg p-2 border border-slate-100">
+           <div class="flex justify-between items-center">
+              <span class="text-[10px] font-bold text-slate-400 uppercase">แบตเตอรี่</span>
+              <span class="font-mono font-black text-slate-700">${v.battery || 0}%</span>
+           </div>
+        </div>
+      </div>
+    `;
 };
 
 const initMap = () => {
@@ -88,17 +122,11 @@ const initMap = () => {
 const updateGeofenceDraw = () => {
   if (!map.value) return;
   const gf = props.geofence;
-
   if (!gf || !gf.enabled || !gf.lat || !gf.lng) {
-    if (geofenceCircle) { 
-        map.value.removeLayer(geofenceCircle); 
-        geofenceCircle = null; 
-    }
+    if (geofenceCircle) { map.value.removeLayer(geofenceCircle); geofenceCircle = null; }
     return;
   }
-  
   const color = props.isEditing ? '#f59e0b' : '#9333ea'; 
-  
   if (geofenceCircle) {
     geofenceCircle.setLatLng([gf.lat, gf.lng]); 
     geofenceCircle.setRadius(gf.radius);
@@ -110,44 +138,44 @@ const updateGeofenceDraw = () => {
   }
 };
 
+// 🎯 3. แก้ไขการวาดหมุด: แยกโหมดปกติ กับโหมดแก้ไข Geofence
 const updateMarkersDraw = () => {
     if (!map.value || !props.data) return;
-    
     const vehicles = props.data;
     const currentIds = new Set();
 
     vehicles.forEach(vehicle => {
         if (!vehicle.lat || !vehicle.lng) return;
-        
         const id = vehicle.id || vehicle.deviceId;
         if (!id) return;
-
         currentIds.add(id);
 
-        if (markers[id]) {
-            // มีหมุดอยู่แล้ว -> ขยับตำแหน่ง
-            markers[id].setLatLng([vehicle.lat, vehicle.lng]);
-            // อัปเดตไอคอน (เผื่อสถานะเปลี่ยน Online <-> Offline)
-            markers[id].setIcon(createCustomIcon(vehicle)); 
-            
-            // อัปเดต Popup
-            if (markers[id].getPopup() && markers[id].getPopup().isOpen()) {
-                markers[id].setPopupContent(buildPopupContent(vehicle));
-            } else {
-                markers[id].bindPopup(buildPopupContent(vehicle));
-            }
-
-        } else {
-            // สร้างหมุดใหม่
+        if (!markers[id]) {
             markers[id] = L.marker([vehicle.lat, vehicle.lng], { 
                 icon: createCustomIcon(vehicle) 
             }).addTo(map.value);
-            
-            markers[id].bindPopup(buildPopupContent(vehicle));
+        } else {
+            markers[id].setLatLng([vehicle.lat, vehicle.lng]);
+            markers[id].setIcon(createCustomIcon(vehicle));
         }
+
+        // จัดการ Event การคลิก
+        markers[id].off('click'); 
+        markers[id].on('click', (e) => {
+            if (props.isEditing) {
+                // 🔥 ถ้าแก้ Geofence อยู่ ให้คลิกที่รถเพื่อวางจุดศูนย์กลางทันที!
+                emit('update:center', { lat: vehicle.lat, lng: vehicle.lng });
+                markers[id].closePopup();
+                L.DomEvent.stopPropagation(e); // ไม่ให้แผนที่ด้านล่างรับ click ซ้ำ
+            } else {
+                // โหมดปกติ ให้เปิด Popup ดู Status
+                markers[id].openPopup();
+            }
+        });
+
+        markers[id].bindPopup(buildPopupContent(vehicle));
     });
 
-    // ลบหมุดที่หายไป
     Object.keys(markers).forEach(id => {
         if (!currentIds.has(id)) {
             map.value.removeLayer(markers[id]);
@@ -155,36 +183,6 @@ const updateMarkersDraw = () => {
         }
     });
 };
-
-const buildPopupContent = (v) => {
-    const isOnline = v.status === 'ONLINE';
-    const statusColor = isOnline ? 'text-green-600' : 'text-slate-400';
-    const statusText = isOnline ? 'ONLINE' : 'OFFLINE';
-
-    return `
-      <div class="text-sm min-w-[120px]">
-        <div class="font-bold text-slate-800 text-base mb-1">${v.name || v.id}</div>
-        
-        <div class="flex items-center gap-2 mb-2">
-            <span class="w-2 h-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-slate-400'}"></span>
-            <span class="text-xs font-bold ${statusColor}">${statusText}</span>
-        </div>
-
-        <div class="text-xs text-slate-500 space-y-1">
-           <div class="flex justify-between">
-              <span>ความเร็ว:</span>
-              <span class="font-mono font-bold text-slate-700">${v.speed?.toFixed(1) || 0} km/h</span>
-           </div>
-           <div class="flex justify-between">
-              <span>แบตเตอรี่:</span>
-              <span class="font-mono font-bold text-slate-700">${v.battery || 0}%</span>
-           </div>
-        </div>
-      </div>
-    `;
-};
-
-// --- Exposed Functions ---
 
 const focusCar = (deviceId) => { 
     const marker = markers[deviceId];
@@ -199,96 +197,38 @@ const focusLatLn = (lat, lng, zoom = 16) => {
   map.value.setView([lat, lng], zoom);
 };
 
-const focusCarWithOffset = (deviceId, offsetY = 0) => {
-    const marker = markers[deviceId];
-    if (marker && map.value) {
-        const latLng = marker.getLatLng();
-        const point = map.value.project(latLng, 16);
-        point.y = point.y + offsetY; 
-        const newCenter = map.value.unproject(point, 16);
-        map.value.flyTo(newCenter, 16, { duration: 1.0 });
-        marker.openPopup();
-    }
-};
-
-onMounted(() => {
-    nextTick(() => {
-        initMap();
-    });
-});
-
-onUnmounted(() => { 
-    if (map.value) {
-        map.value.remove();
-        map.value = null;
-    }
-});
-
+onMounted(() => { nextTick(() => { initMap(); }); });
+onUnmounted(() => { if (map.value) { map.value.remove(); map.value = null; } });
 watch(() => props.data, updateMarkersDraw, { deep: true });
 watch(() => props.geofence, updateGeofenceDraw, { deep: true });
-
-defineExpose({ focusCar, focusLatLn ,focusCarWithOffset});
+defineExpose({ focusCar, focusLatLn });
 </script>
 
 <style>
-/* Custom Marker CSS */
 .custom-marker-container { pointer-events: none; } 
-
 .marker-wrapper {
   position: relative;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  transition: all 0.3s ease; /* เพิ่ม Effect เวลาเปลี่ยนสถานะ */
+  width: 40px; height: 40px;
+  display: flex; justify-content: center; align-items: flex-end;
+  transition: all 0.3s ease;
 }
-
-/* 🔥 Style สำหรับรถ Offline */
-.marker-offline {
-  filter: grayscale(100%); /* ขาวดำ */
-  opacity: 0.7; /* จางลง */
-}
-
+.marker-offline { filter: grayscale(100%); opacity: 0.7; }
 .marker-pin {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid white;
+  width: 14px; height: 14px;
+  border-radius: 50%; border: 2px solid white;
   box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-  z-index: 20;
-  position: absolute;
-  bottom: 2px;
+  z-index: 20; position: absolute; bottom: 2px;
   transition: background-color 0.3s ease;
 }
-
 .marker-label {
-  position: absolute;
-  bottom: 25px;
+  position: absolute; bottom: 25px;
   background: rgba(255, 255, 255, 0.9);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: bold;
-  color: #333;
+  padding: 2px 6px; border-radius: 4px;
+  font-size: 10px; font-weight: bold; color: #333;
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-  white-space: nowrap;
-  pointer-events: auto;
-  z-index: 30;
+  white-space: nowrap; pointer-events: auto; z-index: 30;
 }
-
-/* Leaflet Popup Clean Style */
-.leaflet-popup-content-wrapper {
-    border-radius: 12px; /* โค้งมนสวยขึ้น */
-    padding: 0;
-    overflow: hidden;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-}
-.leaflet-popup-content {
-    margin: 12px 16px;
-    line-height: 1.5;
-}
-.leaflet-popup-tip {
-    background: white;
-}
+.leaflet-popup-content-wrapper { border-radius: 12px; padding: 0; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
+.leaflet-popup-content { margin: 12px 16px; line-height: 1.5; }
+.leaflet-popup-tip { background: white; }
 </style>

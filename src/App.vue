@@ -5,6 +5,8 @@
       <router-view @toast="handleToast" />
     </div>
 
+    <GlobalAlertManager />
+
     <Transition name="toast-slide">
       <div v-if="toast.show" 
            class="fixed top-5 right-5 z-[9999] flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl border backdrop-blur-md transition-all duration-300 min-w-[320px] max-w-sm cursor-pointer
@@ -31,7 +33,10 @@
 <script setup>
 import { reactive, computed } from 'vue';
 
-// --- Toast State ---
+// ✨ 3. Import ไฟล์ Component ที่เราเพิ่งสร้างเข้ามา (เช็ค Path ให้ตรงกับโฟลเดอร์ของคุณนะครับ)
+import GlobalAlertManager from './components/GlobalAlertManager.vue';
+
+// --- Toast State เดิมของคุณ ---
 const toast = reactive({
   show: false,
   title: '',
@@ -41,14 +46,12 @@ const toast = reactive({
   timer: null
 });
 
-// --- ✅ ย้าย setupToast มาไว้ข้างบน (ป้องกัน Error: Cannot access before initialization) ---
+// --- Logic ของ Toast เดิม ---
 const setupToast = (data) => {
-  // 1. กำหนดค่า Default
   toast.title = data.title || 'แจ้งเตือน';
   toast.message = data.message || '';
   toast.icon = data.icon || '🔔';
 
-  // 2. ตรวจสอบสีเพื่อกำหนด Type
   const colorClass = data.color || '';
   
   if (colorClass.includes('error') || colorClass.includes('rose') || colorClass.includes('red') || data.type === 'error') {
@@ -62,31 +65,23 @@ const setupToast = (data) => {
     if (!data.icon) toast.icon = '✅';
   }
 
-  // 3. สั่งแสดงผล
   toast.show = true;
 
-  // 4. ตั้งเวลาปิด (3 วินาที)
   if (toast.timer) clearTimeout(toast.timer);
   toast.timer = setTimeout(() => {
     toast.show = false;
   }, 3000);
 };
 
-// --- Handle Toast Event ---
 const handleToast = (payload) => {
   if (!payload) return;
-
-  // รองรับกรณีส่งมาแค่ String
   if (typeof payload === 'string') {
     setupToast({ title: payload });
     return;
   }
-
-  // กรณีส่งมาเป็น Object
   setupToast(payload);
 };
 
-// --- Dynamic Styles ---
 const toastStyle = computed(() => {
   switch (toast.type) {
     case 'success': 
@@ -102,7 +97,7 @@ const toastStyle = computed(() => {
 </script>
 
 <style>
-/* Animation */
+/* Animation ของ Toast เดิม */
 .toast-slide-enter-active,
 .toast-slide-leave-active {
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
