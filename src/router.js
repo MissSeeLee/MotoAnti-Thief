@@ -5,17 +5,18 @@ import LoginView from "./views/LoginView.vue";
 import RegisterView from "./views/RegisterView.vue";
 import DashboardView from "./views/DashboardView.vue";
 import HistoryView from "./views/HistoryView.vue";
-import JoinView from "./views/JoinView.vue"; // สำหรับรับรถจากเพื่อน
-import VerifyEmail from "./views/VerifyEmail.vue"; // สำหรับยืนยันอีเมล
-import PublicTracking from "./views/PublicTracking.vue";
+import VerifyEmail from "./views/VerifyEmail.vue";
 import ChangePasswordView from "./views/ChangePassword.vue";
 import ForgotPasswordView from "./views/ForgotPasswordView.vue";
 import ResetPasswordView from "./views/ResetPasswordView.vue";
 
-// 🔥 เพิ่ม 2 บรรทัดนี้สำหรับระบบ Family Security Network
-import RegisterShare from "./views/RegisterShare.vue"; // 🔓 หน้าลูกชายกรอกเบอร์
-import SharingManagement from "./views/SharingManagement.vue"; // 🔒 หน้าเจ้าของรถจัดการลิ้งค์
-import GuestTracking from "./views/GuestTracking.vue"; // 👈 เพิ่มบรรทัดนี้ลงไป
+// 🔥 นำเข้า View สำหรับระบบ Family Security Network
+import SharingManagement from "./views/SharingManagement.vue"; // หน้าจัดการลิ้งค์ของ Owner
+import GuestTracking from "./views/GuestTracking.vue"; // หน้าแผนที่สำหรับ Guest (ฉบับสมบูรณ์)
+
+// ⚠️ โค้ดที่รอการยุบรวม (หน้าฟอร์มกรอกข้อมูลสำหรับ Guest)
+import RegisterShare from "./views/RegisterShare.vue"; 
+
 const routes = [
   // ==========================================
   // 🔓 Public Routes (ไม่ต้อง Login)
@@ -50,31 +51,18 @@ const routes = [
     component: VerifyEmail,
     meta: { requiresAuth: false },
   },
-  {
-    path: "/join/:token",
-    name: "Join",
-    component: JoinView,
-    meta: { requiresAuth: false },
-  },
+  // ✅ เชื่อมลิงก์จากอีเมล เข้าสู่หน้าแผนที่ฉบับสมบูรณ์ทันที
   {
     path: "/track-public/:token",
-    name: "PublicTracking",
-    component: PublicTracking,
+    alias: "/track/:token", // 👈 เพิ่มบรรทัดนี้! (เข้าลิงก์ไหนก็มาโผล่หน้านี้)
+    name: "GuestTracking",
+    component: GuestTracking,
     meta: {
       requiresAuth: false,
-      layout: "empty",
+      layout: "empty", 
     },
   },
- {
-    path: '/track/:token',
-    name: 'GuestTracking',
-    component: GuestTracking,
-    meta: { 
-      requiresAuth: false, // 🔓 สำคัญมาก: ต้องระบุให้ชัดว่าไม่ต้อง Login
-      layout: 'empty'      // 📱 แนะนำให้ใช้ Layout เปล่าเพื่อพื้นที่แผนที่สูงสุด
-    }
-  },
-  // ✅ แก้ไข: เพิ่ม meta ให้รู้ว่าเป็น Public และแก้ Error หน้าขาวแล้ว
+  // ⚠️ 2 หน้านี้เดี๋ยวเราจะยุบรวมกันในขั้นตอนต่อไป
   {
     path: "/register-share/:token",
     name: "RegisterShare",
@@ -103,7 +91,6 @@ const routes = [
     component: ChangePasswordView,
     meta: { requiresAuth: true },
   },
-  // ✅ เพิ่ม: หน้าจัดการลิ้งค์แชร์ของเจ้าของรถ
   {
     path: "/sharing-management/:deviceId",
     name: "SharingManagement",
@@ -134,7 +121,7 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const isLoggedIn = !!localStorage.getItem("token");
 
-  // 1. ถ้าหน้านั้นต้องการ Login (requiresAuth: true) แต่เราไม่มี Token -> ดีดไป Login
+  // 1. ถ้าหน้านั้นต้องการ Login แต่ไม่มี Token -> ดีดไป Login
   if (to.meta.requiresAuth && !isLoggedIn) {
     next("/login");
   }

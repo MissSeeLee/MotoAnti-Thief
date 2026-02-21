@@ -1,31 +1,43 @@
 <template>
   <div class="flex h-dvh w-screen overflow-hidden bg-slate-100 font-sans relative select-none">
     
+    <div v-if="currentStatus === 'THEFT' || currentStatus === 'CRASH'" class="absolute top-4 left-0 right-0 z-[50] px-4 pointer-events-none transition-all">
+       <div class="bg-red-500/90 backdrop-blur-md text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-4 animate-bounce border border-white/20 max-w-md mx-auto">
+          <span class="text-3xl">🚨</span>
+          <div>
+            <p class="text-[10px] uppercase font-black opacity-80 leading-none mb-1">Emergency Alert</p>
+            <p class="font-bold text-sm">ตรวจพบเหตุฉุกเฉิน / การโจรกรรม!</p>
+          </div>
+       </div>
+    </div>
+
     <MapViewer
       v-if="deviceArray.length > 0"
       ref="mapViewerRef"
       :data="deviceArray"
-      :geofence="{ enabled: false }"
+      :geofence="currentGeofence"
       class="absolute inset-0 w-full h-full z-0"
     />
 
     <div @click="focusOnCar" 
-         class="absolute top-4 left-4 right-4 md:left-auto md:right-4 md:w-80 z-10 bg-white/95 backdrop-blur-xl shadow-2xl rounded-3xl p-5 border border-slate-100 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]">
+         class="absolute top-20 md:top-4 left-4 right-4 md:left-auto md:right-4 md:w-80 z-10 bg-white/95 backdrop-blur-xl shadow-2xl rounded-3xl p-5 border border-slate-100 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]">
       
       <div class="flex justify-between items-start mb-4">
         <div>
-          <h2 class="text-lg font-black text-slate-800">{{ deviceInfo.name || 'กำลังโหลดข้อมูล...' }}</h2>
+          <h2 class="text-xl font-black text-slate-800">{{ deviceInfo.name || 'กำลังโหลดข้อมูล...' }}</h2>
           <div class="flex items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase mt-1"
                :class="{
                  'text-emerald-500': currentStatus === 'ONLINE',
                  'text-slate-400': currentStatus === 'OFFLINE',
-                 'text-amber-500': currentStatus === 'PARKED'
+                 'text-amber-500': currentStatus === 'PARKED',
+                 'text-red-500': currentStatus === 'THEFT' || currentStatus === 'CRASH'
                }">
             <span class="w-2 h-2 rounded-full" 
                   :class="{
                     'bg-emerald-500 animate-pulse': currentStatus === 'ONLINE',
                     'bg-slate-400': currentStatus === 'OFFLINE',
-                    'bg-amber-500': currentStatus === 'PARKED'
+                    'bg-amber-500': currentStatus === 'PARKED',
+                    'bg-red-500 animate-ping': currentStatus === 'THEFT' || currentStatus === 'CRASH'
                   }"></span>
             {{ currentStatus }}
           </div>
@@ -57,12 +69,20 @@
           </span>
         </div>
       </div>
+
+      <a v-if="deviceInfo.lat && deviceInfo.lng" 
+   :href="`https://www.google.com/maps/search/?api=1&query=${deviceInfo.lat},${deviceInfo.lng}`" 
+   target="_blank"
+   class="mt-3 w-full flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all">
+   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.071-.041a16.975 16.975 0 0 0 3.58-3.14c1.58-1.887 2.485-3.728 2.485-5.334 0-4.402-3.535-7.981-7.89-7.981-4.356 0-7.89 3.579-7.89 7.981 0 1.606.905 3.447 2.485 5.334a16.976 16.976 0 0 0 3.58 3.14ZM12 14.25a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z" clip-rule="evenodd" /></svg>
+   Navigate (Google Maps)
+</a>
     </div>
 
     <div class="absolute bottom-8 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:w-[400px] z-10 flex gap-3">
-      <button @click="triggerFindCar" :disabled="loadingFind" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-[1.25rem] h-14 font-black text-sm md:text-base flex items-center justify-center gap-2 shadow-xl shadow-blue-600/30 transition-transform active:scale-95 disabled:opacity-70">
+      <button @click="triggerFindCar" :disabled="loadingFind" class="flex-1 bg-slate-900 hover:bg-slate-800 text-white rounded-[1.25rem] h-14 font-black text-sm md:text-base flex items-center justify-center gap-2 shadow-xl shadow-slate-900/30 transition-transform active:scale-95 disabled:opacity-70">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
-        {{ loadingFind ? 'กำลังส่งคำสั่ง...' : 'กดเพื่อหารถ' }}
+        {{ loadingFind ? 'กำลังส่งคำสั่ง...' : 'ส่งสัญญาณค้นหารถ' }}
       </button>
       
       <button @click="showEditModal = true" class="w-14 h-14 bg-white/90 backdrop-blur-md text-slate-600 hover:text-blue-600 rounded-[1.25rem] flex items-center justify-center shadow-xl border border-slate-100 transition-transform active:scale-95">
@@ -74,7 +94,7 @@
       <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" @click="showEditModal = false"></div>
       <div class="relative w-full bg-white rounded-t-[2.5rem] sm:rounded-3xl shadow-2xl p-8 animate-slide-up">
         <div class="flex justify-between items-center mb-6">
-          <h3 class="text-xl font-black text-slate-800">ข้อมูลรับแจ้งเตือน</h3>
+          <h3 class="text-xl font-black text-slate-800">ตั้งค่ารับแจ้งเตือน</h3>
           <button @click="showEditModal = false" class="btn btn-circle btn-ghost btn-sm bg-slate-100">✕</button>
         </div>
         <div class="space-y-4">
@@ -87,7 +107,7 @@
             <input v-model="subscriber.email" type="email" placeholder="email@example.com" class="input w-full bg-slate-50 border-slate-200 mt-1 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"/>
           </div>
         </div>
-        <button @click="updateInfo" class="btn btn-block h-14 bg-blue-600 hover:bg-blue-700 text-white border-none rounded-2xl shadow-xl shadow-blue-200 text-base font-black mt-8">
+        <button @click="updateInfo" class="btn btn-block h-14 bg-slate-900 hover:bg-slate-800 text-white border-none rounded-2xl shadow-xl shadow-slate-200 text-base font-black mt-8">
           บันทึกการแก้ไข
         </button>
       </div>
@@ -127,8 +147,7 @@ const socket = io(socketUrl, {
 // States
 const deviceInfo = ref({});
 const subscriber = ref({ phone: '', email: '' });
-
-// 🔥 สถานะ (อิงตาม Dashboard)
+const currentGeofence = ref({ enabled: false, lat: 0, lng: 0, radius: 200 });
 const currentStatus = ref('OFFLINE'); 
 
 const showEditModal = ref(false);
@@ -137,7 +156,6 @@ const mapViewerRef = ref(null);
 const isTracking = ref(true); 
 let checkInterval = null;
 
-// ป้อนข้อมูลให้ MapViewer อัปเดตสีตาม Status ได้อย่างถูกต้อง
 const deviceArray = computed(() => {
   if (!deviceInfo.value.deviceId) return [];
   return [{
@@ -145,22 +163,19 @@ const deviceArray = computed(() => {
     name: deviceInfo.value.name,
     lat: Number(deviceInfo.value.lat),
     lng: Number(deviceInfo.value.lng),
-    status: currentStatus.value, // ส่งคำว่า ONLINE, OFFLINE, PARKED ไปให้ Map
+    status: currentStatus.value,
     ign: deviceInfo.value.ign,
     battery: deviceInfo.value.currentBattery,
-    geofence: { enabled: false }
+    geofence: currentGeofence.value 
   }];
 });
 
-// 🍞 Toast Logic
+// Toast Logic
 const showToast = ref(false);
 const toastData = reactive({ title: "", message: "", icon: "", colorClass: "" });
 
 const triggerToast = (title, message, icon, colorCode) => {
-  toastData.title = title;
-  toastData.message = message;
-  toastData.icon = icon;
-  
+  toastData.title = title; toastData.message = message; toastData.icon = icon;
   if (colorCode.includes("success")) toastData.colorClass = "bg-emerald-600 text-white border-emerald-500 shadow-emerald-900/20";
   else if (colorCode.includes("error")) toastData.colorClass = "bg-rose-600 text-white border-rose-500 shadow-rose-900/20";
   else if (colorCode.includes("warning")) toastData.colorClass = "bg-amber-500 text-white border-amber-400 shadow-amber-900/20";
@@ -169,14 +184,12 @@ const triggerToast = (title, message, icon, colorCode) => {
 
   showToast.value = true;
   if (toastData.timer) clearTimeout(toastData.timer);
-  toastData.timer = setTimeout(() => (showToast.value = false), 3000);
+  toastData.timer = setTimeout(() => (showToast.value = false), 3500);
 };
 
 const focusOnCar = () => {
   isTracking.value = true;
-  if (mapViewerRef.value && deviceInfo.value.deviceId) {
-    mapViewerRef.value.focusCar(deviceInfo.value.deviceId);
-  }
+  if (mapViewerRef.value && deviceInfo.value.deviceId) mapViewerRef.value.focusCar(deviceInfo.value.deviceId);
 };
 
 const toggleTracking = () => {
@@ -189,23 +202,30 @@ const toggleTracking = () => {
   }
 };
 
-// 🔥 อัปเดต Logic การดึงข้อมูลครั้งแรก
 const fetchInitialData = async () => {
   try {
-    const res = await axios.get(`/api/sharing/live/${token}`);
+    const res = await axios.get(`/api/sharing/live/${token}`); // ใช้ API หลักตัวนี้เลย ครบจบ
     if (res.data.success) {
       deviceInfo.value = res.data.device;
-      subscriber.value = res.data.subscriber;
+      subscriber.value = res.data.subscriber || { phone: '', email: '' };
       
       const rawIgn = res.data.device.ign;
       deviceInfo.value.ign = (rawIgn === "ON" || rawIgn === "on" || rawIgn === true || rawIgn === 1);
       deviceInfo.value.lastUpdate = new Date(res.data.device.updatedAt || new Date());
 
-      // คำนวณความต่างของเวลาเพื่อเช็ค Offline
+      currentGeofence.value = {
+        enabled: !!res.data.device.isGeofenceActive,
+        lat: parseFloat(res.data.device.geofenceLat || 0),
+        lng: parseFloat(res.data.device.geofenceLng || 0),
+        radius: Number(res.data.device.geofenceRadius || 200),
+      };
+
       const now = new Date();
       const diffMinutes = (now - deviceInfo.value.lastUpdate) / 1000 / 60;
 
-      if (rawIgn === "PARKED") {
+      if (res.data.device.currentStatus === 'THEFT' || res.data.device.currentStatus === 'CRASH') {
+          currentStatus.value = res.data.device.currentStatus;
+      } else if (rawIgn === "PARKED") {
           currentStatus.value = "PARKED";
       } else if (diffMinutes > 5) {
           currentStatus.value = "OFFLINE";
@@ -216,20 +236,16 @@ const fetchInitialData = async () => {
       setTimeout(() => { focusOnCar(); }, 500);
     }
   } catch (err) {
-    triggerToast("Error", "ไม่สามารถเข้าถึงข้อมูลรถได้ (ลิ้งก์อาจหมดอายุ)", "❌", "alert-error");
+    triggerToast("Error", "ไม่สามารถเข้าถึงข้อมูลรถได้ (ลิงก์อาจหมดอายุ)", "❌", "alert-error");
   }
 };
 
 const triggerFindCar = async () => {
   loadingFind.value = true;
   try {
-    // 🎯 ยิงไปเรียก Backend อย่างเดียว (ไม่ต้องส่งค่าอะไรไป)
     await axios.post(`/api/sharing/find/${token}`);
-    
-    // แสดง Toast สำเร็จ
-    triggerToast("Sent", "ส่งสัญญาณตามหาแล้ว", "📢", "alert-info");
+    triggerToast("Sent", "ส่งคำสั่งค้นหารถเรียบร้อย", "📢", "alert-info");
   } catch (e) {
-    console.error("Find Car Error:", e);
     triggerToast("Error", "ส่งคำสั่งไม่สำเร็จ", "❌", "alert-error");
   } finally {
     loadingFind.value = false;
@@ -246,14 +262,12 @@ const updateInfo = async () => {
   }
 };
 
-// 🔥 ตัวนับเวลาถอยหลัง 5 นาที ถ้าไม่มีข้อมูลใหม่ให้เป็น OFFLINE
 const startOfflineCheck = () => {
   checkInterval = setInterval(() => {
     if (!deviceInfo.value.lastUpdate) return;
     const diffMinutes = (Date.now() - new Date(deviceInfo.value.lastUpdate).getTime()) / 1000 / 60;
     
-    // ถ้าเกิน 5 นาที ให้กลายเป็น OFFLINE เลย
-    if (currentStatus.value !== 'OFFLINE' && diffMinutes > 5) {
+    if (currentStatus.value !== 'OFFLINE' && currentStatus.value !== 'THEFT' && currentStatus.value !== 'CRASH' && diffMinutes > 5) {
       currentStatus.value = 'OFFLINE';
       deviceInfo.value.ign = false;
     }
@@ -273,10 +287,12 @@ onMounted(async () => {
       deviceInfo.value.lng = Number(data.lng);
       deviceInfo.value.ign = isIgnOn;
       deviceInfo.value.currentBattery = data.battery ?? data.batt ?? data.currentBattery ?? deviceInfo.value.currentBattery;
-      deviceInfo.value.lastUpdate = new Date(); // รีเซ็ตเวลาล่าสุด
+      deviceInfo.value.lastUpdate = new Date(); 
       
-      // 🔥 Logic เปลี่ยนสถานะ Real-time เหมือน Dashboard
-      if (rawIgn === "PARKED") {
+      // Update Status Priority
+      if (data.status === 'THEFT' || data.status === 'CRASH') {
+          currentStatus.value = data.status;
+      } else if (rawIgn === "PARKED") {
           currentStatus.value = "PARKED";
       } else if (!isIgnOn) { 
           currentStatus.value = "OFFLINE";
@@ -284,31 +300,47 @@ onMounted(async () => {
           currentStatus.value = "ONLINE";
       }
 
-      if (isTracking.value && mapViewerRef.value) {
-        mapViewerRef.value.focusCar(data.deviceId);
-      }
+      if (isTracking.value && mapViewerRef.value) mapViewerRef.value.focusCar(data.deviceId);
+    }
+  });
+
+  socket.on("geofence_update", (data) => {
+    if (deviceInfo.value.deviceId === data.deviceId) {
+      currentGeofence.value = {
+        enabled: data.geofence.enabled,
+        lat: parseFloat(data.geofence.lat || 0),
+        lng: parseFloat(data.geofence.lng || 0),
+        radius: Number(data.geofence.radius || 200),
+      };
+      if (data.geofence.enabled) triggerToast("Geofence On", "เจ้าของรถตั้งขอบเขตความปลอดภัยใหม่", "📍", "alert-info");
+      else triggerToast("Geofence Off", "ปิดขอบเขตความปลอดภัยแล้ว", "ℹ️", "alert-info");
     }
   });
 
   socket.on("new_alert", (data) => {
     if (deviceInfo.value.deviceId === data.deviceId) {
        if (data.message.includes("FINDING START")) {
-          triggerToast("Find Bike", "ส่งเสียงค้นหารถ...", "📢", "alert-info");
+          triggerToast("Find Bike", "สั่งให้รถส่งเสียงร้อง...", "📢", "alert-info");
        } else if (data.message.includes("THEFT") || data.message.includes("ACCIDENT")) {
-          triggerToast("Critical Alert", "มีการสั่นสะเทือน หรือเกิดเหตุรุนแรง!", "🚨", "alert-error");
+          currentStatus.value = 'THEFT'; // Trigger Banner สีแดง
+          triggerToast("Critical Alert", "มีการสั่นสะเทือนรุนแรง หรือเกิดเหตุขโมย!", "🚨", "alert-error");
        }
     }
   });
 });
 
 onUnmounted(() => {
-  if (socket) socket.disconnect();
+  if (socket) {
+    socket.off("new_location");
+    socket.off("new_alert");
+    socket.off("geofence_update");
+    socket.disconnect();
+  }
   if (checkInterval) clearInterval(checkInterval);
 });
 </script>
 
 <style scoped>
-/* (Style คงเดิม) */
 .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
 @keyframes slideUp { 0% { transform: translateY(100%); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
 .toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }

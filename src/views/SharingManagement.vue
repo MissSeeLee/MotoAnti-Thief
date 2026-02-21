@@ -37,17 +37,17 @@
     <div v-else class="px-4 space-y-4">
       <div v-for="share in shares" :key="share.id" 
            class="bg-white rounded-[2rem] border p-5 shadow-sm relative transition-all"
-           :class="share.registeredAt ? 'border-blue-100 ring-2 ring-blue-50' : 'border-dashed border-slate-200'">
+           :class="(share.phone || share.email) ? 'border-blue-100 ring-2 ring-blue-50' : 'border-dashed border-slate-200'">
         
         <div class="flex justify-between items-start">
           <div class="flex items-center gap-3">
              <div class="w-10 h-10 rounded-full flex items-center justify-center font-black text-sm shadow-inner"
-                  :class="share.registeredAt ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'">
+                  :class="(share.phone || share.email) ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'">
                {{ share.label ? share.label.charAt(0).toUpperCase() : '?' }}
              </div>
              <div>
                 <h3 class="text-base font-black text-slate-800">{{ share.label }}</h3>
-                <span v-if="share.registeredAt" class="text-[9px] font-bold text-emerald-500 uppercase tracking-widest flex items-center gap-1">
+                <span v-if="(share.phone || share.email)" class="text-[9px] font-bold text-emerald-500 uppercase tracking-widest flex items-center gap-1">
                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> ใช้งานอยู่
                 </span>
                 <span v-else class="text-[9px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-1">
@@ -57,7 +57,7 @@
           </div>
           
           <div class="flex gap-1 bg-slate-50 rounded-full p-1">
-            <button v-if="share.registeredAt" @click="copyTrackingLink(share.token)" class="btn btn-circle btn-ghost btn-xs text-slate-500 hover:text-emerald-600 hover:bg-emerald-50" title="คัดลอกลิ้งก์แผนที่">
+            <button v-if="(share.phone || share.email)" @click="copyTrackingLink(share.token)" class="btn btn-circle btn-ghost btn-xs text-slate-500 hover:text-emerald-600 hover:bg-emerald-50" title="คัดลอกลิ้งก์แผนที่">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>
             </button>
 
@@ -85,7 +85,7 @@
            </div>
         </div>
         
-        <div v-if="!share.registeredAt" class="mt-3">
+        <div v-if="!(share.phone || share.email)" class="mt-3">
           <button @click="copyLink(share.token)" class="btn btn-sm btn-block bg-blue-50 text-blue-600 border-none hover:bg-blue-100 rounded-xl font-bold shadow-sm">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 011.927-.184" /></svg>
             คัดลอกลิ้งค์ให้ {{ share.label }}
@@ -100,7 +100,9 @@
         <h3 class="font-bold text-slate-700 text-lg">ยังไม่มีการแชร์รถ</h3>
         <p class="text-xs text-slate-400 mt-2 px-8">สร้างลิ้งค์ส่งให้คนในครอบครัว เพื่อให้รับการแจ้งเตือนเหตุฉุกเฉินพร้อมกัน</p>
       </div>
-    </div> <div class="fixed bottom-8 right-0 left-0 flex justify-center z-[90] pointer-events-none max-w-md mx-auto">
+    </div> 
+
+    <div class="fixed bottom-8 right-0 left-0 flex justify-center z-[90] pointer-events-none max-w-md mx-auto">
        <button @click="openAddModal" 
                class="btn btn-primary rounded-full px-8 h-14 shadow-2xl shadow-blue-400 pointer-events-auto border-none bg-blue-600 hover:bg-blue-700 text-white font-black text-base gap-2 hover:scale-105 transition-transform">
          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
@@ -125,7 +127,7 @@
             <input v-model="form.label" type="text" placeholder="เช่น ลูกชาย, ภรรยา" class="input w-full bg-slate-50 border-slate-200 mt-1 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"/>
           </div>
 
-          <template v-if="isEditing && form.registeredAt">
+          <template v-if="isEditing && (form.phone || form.email)">
             <div>
               <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">เบอร์โทรศัพท์ (SMS)</label>
               <input v-model="form.phone" type="tel" placeholder="08xxxxxxxx" class="input w-full bg-slate-50 border-slate-200 mt-1 font-bold text-slate-700"/>
@@ -163,7 +165,8 @@
       </div>
     </div>
 
-  </div> </template>
+  </div>
+</template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
@@ -178,21 +181,23 @@ const router = useRouter();
 const deviceId = route.params.deviceId; 
 
 // --- State ---
-const shares = ref([]);
+const shares = ref([]);ห
 const isLoadingData = ref(true);
 
 // Modal States
 const isFormModalOpen = ref(false);
 const isEditing = ref(false);
 const isSaving = ref(false);
-const form = ref({ id: null, label: '', phone: '', email: '', registeredAt: null });
+// เอา registeredAt ออกจากตัวแปรตั้งต้นของ form
+const form = ref({ id: null, label: '', phone: '', email: '' });
 
 const isDeleteModalOpen = ref(false);
 const shareToDelete = ref(null);
 
 // --- Computed ---
-const activeLinksCount = computed(() => shares.value.filter(s => s.registeredAt).length);
-const pendingLinksCount = computed(() => shares.value.filter(s => !s.registeredAt).length);
+// เปลี่ยนการนับจำนวน โดยเช็คจากการมีเบอร์โทรหรืออีเมลแทน
+const activeLinksCount = computed(() => shares.value.filter(s => s.phone || s.email).length);
+const pendingLinksCount = computed(() => shares.value.filter(s => !s.phone && !s.email).length);
 
 // --- Methods ---
 
@@ -211,7 +216,8 @@ const loadShares = async () => {
 
 const openAddModal = () => {
   isEditing.value = false;
-  form.value = { id: null, label: '', phone: '', email: '', registeredAt: null };
+  // รีเซ็ตฟอร์มโดยไม่ต้องมี registeredAt แล้ว
+  form.value = { id: null, label: '', phone: '', email: '' };
   isFormModalOpen.value = true;
 };
 

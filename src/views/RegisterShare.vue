@@ -9,16 +9,16 @@
         
         <div v-if="status === 'loading'" class="flex flex-col items-center justify-center py-10">
           <span class="loading loading-spinner loading-lg text-blue-600 mb-4"></span>
-          <p class="text-slate-500 font-bold animate-pulse text-sm">กำลังตรวจสอบข้อมูลลิ้งค์...</p>
+          <p class="text-slate-500 font-bold animate-pulse text-sm">กำลังตรวจสอบข้อมูลลิงก์...</p>
         </div>
 
         <div v-else-if="status === 'error'" class="text-center py-6 animate-pop">
           <div class="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-4xl mx-auto mb-6 shadow-inner">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-10 h-10"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
           </div>
-          <h2 class="text-2xl font-black text-slate-800 mb-2">ลิ้งค์นี้ไม่สามารถใช้งานได้</h2>
+          <h2 class="text-2xl font-black text-slate-800 mb-2">ลิงก์นี้ไม่สามารถใช้งานได้</h2>
           <p class="text-slate-500 text-sm leading-relaxed mb-8 px-4">
-            {{ errorMessage || 'ลิ้งค์นี้อาจถูกใช้งานไปแล้ว, ถูกยกเลิก, หรือหมดอายุเพื่อความปลอดภัย กรุณาขอลิ้งค์ใหม่จากเจ้าของรถ' }}
+            {{ errorMessage || 'ลิงก์นี้อาจถูกใช้งานไปแล้ว, ถูกยกเลิก, หรือหมดอายุเพื่อความปลอดภัย กรุณาขอลิงก์ใหม่จากเจ้าของรถ' }}
           </p>
           <button @click="closeWindow" class="btn btn-block bg-slate-100 hover:bg-slate-200 text-slate-600 border-none rounded-2xl font-bold h-14">
             ปิดหน้าต่างนี้
@@ -102,11 +102,11 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useRoute, useRouter } from 'vue-router'; // ✅ นำเข้า useRouter
+import { useRoute, useRouter } from 'vue-router';
 import api from '../api';
 
 const route = useRoute();
-const router = useRouter(); // ✅ สร้าง instance เพื่อใช้เปลี่ยนหน้า
+const router = useRouter(); 
 const token = route.params.token;
 
 const status = ref('loading'); 
@@ -134,27 +134,26 @@ onMounted(async () => {
     
     if (res.data.success) {
       
-      // ✅ ถ้าเคยลงทะเบียนแล้ว ให้พาไปหน้า Track เลย
+      // ✅ ถ้าเคยลงทะเบียนแล้ว ให้ดีดไปหน้า Track ทันที
       if (res.data.share && res.data.share.registeredAt) {
-        alert("คุณเคยลงทะเบียนแล้ว ระบบจะพาไปหน้าติดตามรถ...");
-        router.push(`/track/${token}`); 
+        // ใช้ path /track-public ตามที่เราตั้งใน router
+        router.push(`/track-public/${token}`); 
         return;
       }
 
-      // ✅ ถ้ายังไม่เคย ให้โหลดข้อมูลแล้ว "เปิดฟอร์ม" (ไม่เด้งไปไหน)
       shareData.value = {
         label: res.data.share?.label || 'ผู้รับการแชร์',
         deviceId: res.data.share?.deviceId || '-'
       };
       
-      status.value = 'ready'; // 🔴 บรรทัดนี้ทำให้ฟอร์มแสดงขึ้นมาครับ
+      status.value = 'ready';
 
     } else {
       throw new Error('Invalid token');
     }
   } catch (error) {
     console.error('Verify error:', error);
-    errorMessage.value = error.response?.data?.message || 'ลิ้งค์นี้ถูกใช้งานไปแล้วหรือหมดอายุ';
+    errorMessage.value = error.response?.data?.message || 'ลิงก์นี้ถูกใช้งานไปแล้วหรือหมดอายุ';
     status.value = 'error';
   }
 });
@@ -169,12 +168,11 @@ const submitForm = async () => {
       email: form.value.email
     });
     
-    // ✅ ลงทะเบียนเสร็จ เปลี่ยนเป็นหน้าจอสีเขียว
     status.value = 'success'; 
     
-    // ✅ รอ 2.5 วินาทีให้ผู้ใช้อ่านข้อความ แล้วค่อยเปลี่ยนไปหน้าแผนที่
+    // ✅ รอ 2.5 วินาที แล้วค่อยเปลี่ยนไปหน้าแผนที่ (แก้ไข path ตรงนี้)
     setTimeout(() => {
-      router.push(`/track/${token}`);
+      router.push(`/track-public/${token}`);
     }, 2500);
 
   } catch (error) {
@@ -186,7 +184,7 @@ const submitForm = async () => {
 };
 
 const closeWindow = () => {
-  router.push('/');
+  router.push('/login'); // เปลี่ยนให้กลับไปหน้าแรกแทน
 };
 </script>
 
